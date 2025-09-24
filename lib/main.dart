@@ -4,6 +4,7 @@ import 'package:flutter/material.dart'; // Note os dois pontos
 import 'package:quadrafacil/features/authentication/presentation/pages/auth_check_page.dart';
 import 'package:quadrafacil/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:quadrafacil/core/theme/app_theme.dart';
 
 // A função main agora é async para podermos esperar o shared_preferences
 Future<void> main() async {
@@ -28,10 +29,7 @@ class QuadraFacilApp extends StatelessWidget {
     return MaterialApp(
       title: 'Quadra Fácil',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.theme,
       // A tela inicial agora é decidida pela variável showOnboarding
       home: showOnboarding ? const OnboardingPage() : const AuthCheckPage(),
     );

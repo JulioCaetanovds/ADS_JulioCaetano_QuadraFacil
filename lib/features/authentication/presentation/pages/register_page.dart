@@ -1,8 +1,7 @@
 // lib/features/authentication/presentation/pages/register_page.dart
-
 import 'package:flutter/material.dart';
+import 'package:quadrafacil/core/theme/app_theme.dart'; // Importamos o tema para usar as cores
 
-// Usamos um enum para deixar o código do perfil mais legível
 enum UserRole { atleta, dono }
 
 class RegisterPage extends StatefulWidget {
@@ -13,112 +12,118 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  // Variável de estado para controlar a seleção do Radio
-  UserRole? _selectedRole = UserRole.atleta;
+  Set<UserRole> _selectedRole = {UserRole.atleta};
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Crie sua conta'),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 24),
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Nome completo',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person_outline),
-                ),
+      // Mantemos um AppBar simples, apenas para o botão de voltar automático
+      appBar: AppBar(),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: screenHeight -
+                    kToolbarHeight -
+                    MediaQuery.of(context).padding.top,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email_outlined),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Senha',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock_outline),
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 24),
+              child: IntrinsicHeight(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 1. Adicionamos um cabeçalho igual ao da tela de Login
+                    const Text(
+                      'Crie sua Conta',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textColor),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Preencha os dados para começar',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, color: AppTheme.hintColor),
+                    ),
+                    SizedBox(height: screenHeight * 0.05),
 
-              // Seleção de Perfil
-              const Text(
-                'Eu sou:',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<UserRole>(
-                      title: const Text('Atleta'),
-                      value: UserRole.atleta,
-                      groupValue: _selectedRole,
-                      onChanged: (UserRole? value) {
+                    // Formulário
+                    TextFormField(
+                      decoration: const InputDecoration(
+                          labelText: 'Nome completo',
+                          prefixIcon: Icon(Icons.person_outline)),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      decoration: const InputDecoration(
+                          labelText: 'Email',
+                          prefixIcon: Icon(Icons.email_outlined)),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      decoration: const InputDecoration(
+                          labelText: 'Senha',
+                          prefixIcon: Icon(Icons.lock_outline)),
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 24),
+
+                    const Text('Eu sou:',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    SegmentedButton<UserRole>(
+                      segments: const <ButtonSegment<UserRole>>[
+                        ButtonSegment<UserRole>(
+                            value: UserRole.atleta,
+                            label: Text('Atleta'),
+                            icon: Icon(Icons.sports_soccer)),
+                        ButtonSegment<UserRole>(
+                            value: UserRole.dono,
+                            label: Text('Dono de Quadra'),
+                            icon: Icon(Icons.store)),
+                      ],
+                      selected: _selectedRole,
+                      onSelectionChanged: (Set<UserRole> newSelection) {
                         setState(() {
-                          _selectedRole = value;
+                          _selectedRole = newSelection;
                         });
                       },
+                      style: SegmentedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
                     ),
-                  ),
-                  Expanded(
-                    child: RadioListTile<UserRole>(
-                      title: const Text('Dono de Quadra'),
-                      value: UserRole.dono,
-                      groupValue: _selectedRole,
-                      onChanged: (UserRole? value) {
-                        setState(() {
-                          _selectedRole = value;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+                    const SizedBox(height: 32),
 
-              ElevatedButton(
-                onPressed: () {
-                  // Lógica de cadastro virá aqui
-                },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                    // 2. O botão de cadastrar agora está em uma posição visualmente similar
+                    ElevatedButton(
+                      onPressed: () {},
+                      child: const Text('CADASTRAR'),
+                    ),
+
+                    const Spacer(), // O Spacer continua empurrando o link para baixo
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text("Já tem uma conta?"),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Faça login'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-                child: const Text('CADASTRAR', style: TextStyle(fontSize: 16)),
               ),
-
-              // Link para Login
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Já tem uma conta?"),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(
-                        context,
-                      ).pop(); // Volta para a tela anterior (Login)
-                    },
-                    child: const Text('Faça login'),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
