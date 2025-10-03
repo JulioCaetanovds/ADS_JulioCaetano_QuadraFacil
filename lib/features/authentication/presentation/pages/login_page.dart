@@ -22,7 +22,6 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // A função de login que já tínhamos
   void _handleLogin() {
     final email = _emailController.text;
     final password = _passwordController.text;
@@ -38,8 +37,7 @@ class _LoginPageState extends State<LoginPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('Credenciais inválidas! Use atleta/admin ou dono/admin.'),
+          content: Text('Credenciais inválidas! Use atleta/admin ou dono/admin.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -48,100 +46,98 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-
+    // A propriedade resizeToAvoidBottomInset no Scaffold já cuida
+    // de redimensionar a tela quando o teclado aparece.
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
+        // O SafeArea garante que o conteúdo não fique embaixo da barra de status
+        // ou da barra de navegação do sistema.
+        child: Center(
+          child: SingleChildScrollView(
+            // O Padding agora está dentro do SingleChildScrollView
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: screenHeight - MediaQuery.of(context).padding.top,
-              ),
-              child: IntrinsicHeight(
-                child: Column(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 48), // Espaço no topo
+                
+                // Cabeçalho
+                const Text('Bem-vindo de volta!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textColor)),
+                const SizedBox(height: 8),
+                const Text('Faça login para continuar',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16, color: AppTheme.hintColor)),
+                const SizedBox(height: 48),
+
+                // Formulário
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.email_outlined)),
+                  keyboardType: TextInputType.emailAddress,
+                  onFieldSubmitted: (value) => _handleLogin(),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(
+                      labelText: 'Senha',
+                      prefixIcon: Icon(Icons.lock_outline)),
+                  obscureText: true,
+                  onFieldSubmitted: (value) => _handleLogin(),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _handleLogin,
+                  child: const Text('ENTRAR'),
+                ),
+                const SizedBox(height: 24),
+                const Row(children: [
+                  Expanded(child: Divider()),
+                  Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text('OU')),
+                  Expanded(child: Divider()),
+                ]),
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  icon: Image.asset('assets/images/google_logo.png',
+                      height: 20.0),
+                  label: const Text('Entrar com o Google',
+                      style: TextStyle(color: AppTheme.textColor)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: Colors.grey.shade300),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 48),
+
+                // Rodapé
+                Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Spacer(),
-                    const Text('Bem-vindo de volta!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textColor)),
-                    const SizedBox(height: 8),
-                    const Text('Faça login para continuar',
-                        textAlign: TextAlign.center,
-                        style:
-                            TextStyle(fontSize: 16, color: AppTheme.hintColor)),
-                    SizedBox(height: screenHeight * 0.05),
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.email_outlined)),
-                      keyboardType: TextInputType.emailAddress,
-                      // Adicionamos aqui. O `(value)` é obrigatório, mas não precisamos usá-lo.
-                      onFieldSubmitted: (value) => _handleLogin(),
+                    const Text("Não tem uma conta?"),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(MaterialPageRoute(
+                            builder: (context) => const RegisterPage()));
+                      },
+                      child: const Text('Cadastre-se'),
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      decoration: const InputDecoration(
-                          labelText: 'Senha',
-                          prefixIcon: Icon(Icons.lock_outline)),
-                      obscureText: true,
-                      // Adicionamos aqui também.
-                      onFieldSubmitted: (value) => _handleLogin(),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: _handleLogin,
-                      child: const Text('ENTRAR'),
-                    ),
-                    // ... resto do código da página ...
-                    const SizedBox(height: 24),
-                    const Row(children: [
-                      Expanded(child: Divider()),
-                      Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Text('OU')),
-                      Expanded(child: Divider()),
-                    ]),
-                    const SizedBox(height: 24),
-                    OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: Image.asset('assets/images/google_logo.png',
-                          height: 20.0),
-                      label: const Text('Entrar com o Google',
-                          style: TextStyle(color: AppTheme.textColor)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: BorderSide(color: Colors.grey.shade300),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text("Não tem uma conta?"),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).push(MaterialPageRoute(
-                                builder: (context) => const RegisterPage()));
-                          },
-                          child: const Text('Cadastre-se'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
                   ],
                 ),
-              ),
+                const SizedBox(height: 24), // Espaço na base
+              ],
             ),
           ),
         ),

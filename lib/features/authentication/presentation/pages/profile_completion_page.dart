@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart'; // Importamos o tema
+import 'dart:developer' as developer;
 
 // Reutilizamos o mesmo enum da página de registro
 enum UserRole { atleta, dono }
@@ -78,7 +79,7 @@ class _ProfileCompletionPageState extends State<ProfileCompletionPage> {
               ElevatedButton(
                 onPressed: () {
                   // Lógica para salvar o perfil e navegar para a home do app virá aqui
-                  print('Perfil selecionado: $_selectedRole');
+                    developer.log('Perfil selecionado: $_selectedRole', name: 'ProfileCompletionPage');
                 },
                 child: const Text('FINALIZAR CADASTRO'),
               ),
