@@ -2,52 +2,48 @@
 import 'package:flutter/material.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:quadrafacil/features/authentication/presentation/pages/login_page.dart';
+import 'package:quadrafacil/features/home/presentation/pages/add_edit_court_page.dart';
+import 'package:quadrafacil/features/owner_panel/presentation/pages/booking_details_page.dart';
+import 'package:quadrafacil/features/owner_panel/presentation/pages/edit_owner_profile_page.dart';
+import 'package:quadrafacil/features/owner_panel/presentation/pages/payment_settings_page.dart';
+import 'package:quadrafacil/features/owner_panel/presentation/pages/reports_page.dart';
 
-// PLACEHOLDER PAGE
-class AddEditCourtPage extends StatelessWidget {
-  const AddEditCourtPage({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(appBar: AppBar(title: const Text('Adicionar/Editar Espaço')), body: const Center(child: Text('Formulário para dados do espaço')));
-  }
-}
-
-// ABA AGENDA (RF04, RF07) - DETALHADA
+// ABA AGENDA (RF04, RF07) - ATUALIZADA COM NAVEGAÇÃO
 class OwnerAgendaTab extends StatelessWidget {
   const OwnerAgendaTab({super.key});
   @override
   Widget build(BuildContext context) {
+    final bookings = [
+      BookingData(quadra: 'Quadra Central', cliente: 'Carlos Silva', horario: '19:00 - 20:00', status: 'Confirmada'),
+      BookingData(quadra: 'Quadra Central', cliente: 'Fernanda Lima', horario: '20:00 - 21:00', status: 'Confirmada'),
+      BookingData(quadra: 'Arena Litoral', cliente: 'Grupo Amigos', horario: '21:00 - 22:00', status: 'Pendente'),
+    ];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Agenda de Hoje')),
-      body: ListView(
+      body: ListView.builder(
         padding: const EdgeInsets.all(16.0),
-        children: const [
-          // Usaremos o mesmo widget de item de reserva do Atleta
-          BookingListItem(
-            quadra: 'Quadra Central',
-            data: 'Cliente: Carlos Silva',
-            horario: '19:00 - 20:00',
-            status: 'Confirmada',
-          ),
-           BookingListItem(
-            quadra: 'Quadra Central',
-            data: 'Cliente: Fernanda Lima',
-            horario: '20:00 - 21:00',
-            status: 'Confirmada',
-          ),
-           BookingListItem(
-            quadra: 'Arena Litoral',
-            data: 'Cliente: Grupo Amigos',
-            horario: '21:00 - 22:00',
-            status: 'Pendente',
-          ),
-        ],
+        itemCount: bookings.length,
+        itemBuilder: (context, index) {
+          final booking = bookings[index];
+          return BookingListItem(
+            quadra: booking.quadra,
+            data: 'Cliente: ${booking.cliente}',
+            horario: booking.horario,
+            status: booking.status,
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => BookingDetailsPage(booking: booking)),
+              );
+            },
+          );
+        },
       )
     );
   }
 }
 
-// ABA PERFIL (RF02) - DETALHADA
+// ABA PERFIL (RF02) - ATUALIZADA COM NAVEGAÇÃO
 class OwnerProfileTab extends StatelessWidget {
   const OwnerProfileTab({super.key});
   @override
@@ -63,9 +59,15 @@ class OwnerProfileTab extends StatelessWidget {
           const Text('dono@email.com', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: AppTheme.hintColor)),
           const SizedBox(height: 32),
           const Divider(),
-          ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Editar Perfil'), trailing: const Icon(Icons.chevron_right), onTap: () {}),
-          ListTile(leading: const Icon(Icons.account_balance_wallet_outlined), title: const Text('Configurações de Pagamento'), trailing: const Icon(Icons.chevron_right), onTap: () {}),
-          ListTile(leading: const Icon(Icons.bar_chart_outlined), title: const Text('Relatórios'), trailing: const Icon(Icons.chevron_right), onTap: () {}),
+          ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Editar Perfil'), trailing: const Icon(Icons.chevron_right), onTap: () {
+             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const EditOwnerProfilePage()));
+          }),
+          ListTile(leading: const Icon(Icons.account_balance_wallet_outlined), title: const Text('Configurações de Pagamento'), trailing: const Icon(Icons.chevron_right), onTap: () {
+             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PaymentSettingsPage()));
+          }),
+          ListTile(leading: const Icon(Icons.bar_chart_outlined), title: const Text('Relatórios'), trailing: const Icon(Icons.chevron_right), onTap: () {
+             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ReportsPage()));
+          }),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
@@ -83,9 +85,8 @@ class OwnerProfileTab extends StatelessWidget {
   }
 }
 
-
-// ... O restante do arquivo (OwnerHomePage, MyCourtsTab, etc.) continua o mesmo
-class OwnerHomePage extends StatefulWidget { /* ...código inalterado... */ 
+// HOME PAGE PRINCIPAL DO DONO
+class OwnerHomePage extends StatefulWidget {
   const OwnerHomePage({super.key});
 
   @override
@@ -95,19 +96,14 @@ class OwnerHomePage extends StatefulWidget { /* ...código inalterado... */
 class _OwnerHomePageState extends State<OwnerHomePage> {
   int _selectedIndex = 0;
 
-  static final List<Widget> _tabs = <Widget>[
-    const MyCourtsTab(),
-    const OwnerAgendaTab(),
-    const OwnerProfileTab(),
+  static const List<Widget> _tabs = <Widget>[
+    MyCourtsTab(),
+    OwnerAgendaTab(),
+    OwnerProfileTab(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    // Para poder reutilizar o BookingListItem, precisamos importá-lo aqui
-    // A forma mais limpa é movê-lo para um arquivo próprio em /shared/widgets/
-    // Mas por enquanto, vamos apenas adicionar o import.
-    _tabs[1] = const OwnerAgendaTab(); // Apenas garantindo que a versão detalhada seja usada.
-
     return Scaffold(
       body: _tabs[_selectedIndex],
       floatingActionButton: _selectedIndex == 0 ? FloatingActionButton.extended(
@@ -131,7 +127,9 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
     );
   }
 }
-class MyCourtsTab extends StatelessWidget { /* ...código inalterado... */ 
+
+// ABA MEUS ESPAÇOS (RF03)
+class MyCourtsTab extends StatelessWidget {
   const MyCourtsTab({super.key});
 
   @override
@@ -151,7 +149,9 @@ class MyCourtsTab extends StatelessWidget { /* ...código inalterado... */
     );
   }
 }
-class OwnedCourtListItem extends StatelessWidget { /* ...código inalterado... */ 
+
+// WIDGET REUTILIZÁVEL PARA ITEM DA LISTA DE QUADRAS DO DONO
+class OwnedCourtListItem extends StatelessWidget {
   final String nome;
   final int ocupacao;
   final String status;
@@ -172,16 +172,17 @@ class OwnedCourtListItem extends StatelessWidget { /* ...código inalterado... *
           size: 12,
         ),
         onTap: () {
-          Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AddEditCourtPage()));
+          Navigator.of(context).push(MaterialPageRoute(builder: (context) => AddEditCourtPage(courtName: nome)));
         },
       ),
     );
   }
 }
-// Importando o BookingListItem para ser usado na OwnerHomePage
-// O ideal é mover este widget para seu próprio arquivo
+
+// WIDGET REUTILIZÁVEL PARA ITEM DE RESERVA (usado na OwnerAgendaTab)
 class BookingListItem extends StatelessWidget {
   final String quadra, data, horario, status;
+  final VoidCallback? onTap;
 
   const BookingListItem({
     super.key,
@@ -189,6 +190,7 @@ class BookingListItem extends StatelessWidget {
     required this.data,
     required this.horario,
     required this.status,
+    this.onTap,
   });
 
   Color _getStatusColor(String status) {
@@ -206,14 +208,14 @@ class BookingListItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: const Icon(Icons.sports_soccer, color: AppTheme.primaryColor, size: 40),
+        leading: const Icon(Icons.receipt_long_outlined, color: AppTheme.primaryColor, size: 40),
         title: Text(quadra, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('$data • $horario'),
         trailing: Text(
           status.toUpperCase(),
           style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold),
         ),
-        onTap: () { /* Levaria para os detalhes da reserva */ },
+        onTap: onTap,
       ),
     );
   }
