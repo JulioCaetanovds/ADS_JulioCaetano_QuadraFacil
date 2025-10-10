@@ -1,20 +1,26 @@
 // lib/main.dart
 
-import 'package:flutter/material.dart'; // Note os dois pontos
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 import 'package:quadrafacil/features/authentication/presentation/pages/auth_check_page.dart';
 import 'package:quadrafacil/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
 
-// A função main agora é async para podermos esperar o shared_preferences
+import 'firebase_options.dart';
+
+// A função main agora é async para podermos esperar o Firebase
 Future<void> main() async {
-  // Garante que os widgets do Flutter estejam prontos antes de mais nada
+  // Garante que o Flutter esteja pronto
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Linha principal: Inicializa o Firebase usando o arquivo de opções
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  // Carrega a instância do SharedPreferences
+  // O resto do código que já tínhamos
   final prefs = await SharedPreferences.getInstance();
-
-  // Checa se a flag 'showOnboarding' é nula ou true (padrão para a primeira vez)
   final showOnboarding = prefs.getBool('showOnboarding') ?? true;
 
   runApp(QuadraFacilApp(showOnboarding: showOnboarding));

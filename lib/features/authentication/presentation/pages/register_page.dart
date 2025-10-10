@@ -1,5 +1,7 @@
 // lib/features/authentication/presentation/pages/register_page.dart
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:quadrafacil/core/theme/app_theme.dart';
 
 enum UserRole { atleta, dono }
@@ -12,14 +14,72 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  // 1. Controllers para pegar os dados dos campos de texto
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
   Set<UserRole> _selectedRole = {UserRole.atleta};
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // 2. Lógica de cadastro que chama a nossa API
+  Future<void> _handleRegister() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
+    // Lembre-se de usar o IP da sua máquina
+    final url = Uri.parse('http://192.168.10.196:3000/auth/register');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: { 'Content-Type': 'application/json' },
+        body: jsonEncode({
+          'name': _nameController.text,
+          'email': _emailController.text,
+          'password': _passwordController.text,
+          'role': _selectedRole.first == UserRole.atleta ? 'atleta' : 'dono',
+        }),
+      );
+
+      if (response.statusCode == 201 && mounted) {
+        // Sucesso
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Usuário cadastrado com sucesso! Faça o login.'), backgroundColor: Colors.green),
+        );
+        Navigator.of(context).pop(); // Volta para a tela de login
+      } else {
+        // Erro vindo da API
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Ocorreu um erro.');
+      }
+    } catch (e) {
+      // Erro de conexão ou da API
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(), // AppBar para o botão de voltar
+      appBar: AppBar(),
       body: SafeArea(
-        // Adotamos a mesma estrutura robusta da tela de Login
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -27,83 +87,55 @@ class _RegisterPageState extends State<RegisterPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 24), // Espaço no topo
-                
-                // Cabeçalho
-                const Text(
-                  'Crie sua Conta',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textColor),
-                ),
+                const SizedBox(height: 24),
+                const Text('Crie sua Conta', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
                 const SizedBox(height: 8),
-                const Text(
-                  'Preencha os dados para começar',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: AppTheme.hintColor),
-                ),
+                const Text('Preencha os dados para começar', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: AppTheme.hintColor)),
                 const SizedBox(height: 32),
 
-                // Formulário
+                // Formulário com controllers
                 TextFormField(
-                  decoration: const InputDecoration(
-                      labelText: 'Nome completo',
-                      prefixIcon: Icon(Icons.person_outline)),
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: 'Nome completo', prefixIcon: Icon(Icons.person_outline)),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined)),
+                  controller: _emailController,
+                  decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  decoration: const InputDecoration(
-                      labelText: 'Senha',
-                      prefixIcon: Icon(Icons.lock_outline)),
+                  controller: _passwordController,
+                  decoration: const InputDecoration(labelText: 'Senha', prefixIcon: Icon(Icons.lock_outline)),
                   obscureText: true,
                 ),
                 const SizedBox(height: 24),
 
-                // Seleção de Perfil
-                const Text('Eu sou:',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('Eu sou:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 SegmentedButton<UserRole>(
                   segments: const <ButtonSegment<UserRole>>[
-                    ButtonSegment<UserRole>(
-                        value: UserRole.atleta,
-                        label: Text('Atleta'),
-                        icon: Icon(Icons.sports_soccer)),
-                    ButtonSegment<UserRole>(
-                        value: UserRole.dono,
-                        label: Text('Dono de Quadra'),
-                        icon: Icon(Icons.store)),
+                    ButtonSegment<UserRole>(value: UserRole.atleta, label: Text('Atleta'), icon: Icon(Icons.sports_soccer)),
+                    ButtonSegment<UserRole>(value: UserRole.dono, label: Text('Dono de Quadra'), icon: Icon(Icons.store)),
                   ],
                   selected: _selectedRole,
                   onSelectionChanged: (Set<UserRole> newSelection) {
-                    setState(() {
-                      _selectedRole = newSelection;
-                    });
+                    setState(() { _selectedRole = newSelection; });
                   },
-                  style: SegmentedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+                  style: SegmentedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                 ),
                 const SizedBox(height: 32),
                 
-                // Botão principal
+                // Botão de Cadastrar com loading
                 ElevatedButton(
-                  onPressed: () {},
-                  child: const Text('CADASTRAR'),
+                  onPressed: _isLoading ? null : _handleRegister,
+                  child: _isLoading 
+                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('CADASTRAR'),
                 ),
                 const SizedBox(height: 24),
 
-                // Rodapé
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -114,7 +146,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24), // Espaço na base
+                const SizedBox(height: 24),
               ],
             ),
           ),

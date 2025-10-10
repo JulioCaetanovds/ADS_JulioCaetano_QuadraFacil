@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "220371487411",
+    "firebase_url": "https://quadra-facil-app-default-rtdb.firebaseio.com",
+    "project_id": "quadra-facil-app",
+    "storage_bucket": "quadra-facil-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:220371487411:android:23179bb2f47a4d7b613ec6",
+        "android_client_info": {
+          "package_name": "com.example.quadrafacil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgyfBSwZcdA_NkOXOzzrE1V0X5Jam3IlA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
