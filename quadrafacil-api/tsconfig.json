@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    /* Basic Options */
+    "target": "es6",                          // Compila para uma versão de JavaScript compatível
+    "module": "commonjs",                     // O sistema de módulos mais comum para Node.js
+    "resolveJsonModule": true,
+    "esModuleInterop": true,                  // A 'mágica' que permite `import express from 'express'`
+    "forceConsistentCasingInFileNames": true, // Garante consistência nos nomes de arquivos
+
+    /* Strict Type-Checking Options */
+    "strict": true,                           // Habilita todas as checagens de tipo rigorosas
+
+    /* Module Resolution Options */
+    "skipLibCheck": true,                     // Pula a checagem de tipos de arquivos de declaração
+
+    /* Project Layout */
+    "rootDir": "./src",
+    "outDir": "./dist"
+  }
+}
