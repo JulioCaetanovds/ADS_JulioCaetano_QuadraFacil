@@ -2,6 +2,7 @@
 import express, { Request, Response } from 'express';
 import { db } from './config/firebase'; // Verificando que a conexão está importada
 import authRouter from './routes/auth.routes'; // 1. Importamos nossas novas rotas
+import courtRouter from './routes/court.routes';
 
 const app = express();
 const PORT = 3000;
@@ -16,6 +17,7 @@ app.get('/', (req: Request, res: Response) => {
 // 2. Dizemos ao Express para usar nosso roteador de autenticação
 // Todas as rotas dentro de authRouter terão o prefixo '/auth'
 app.use('/auth', authRouter);
+app.use('/courts', courtRouter);
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT} 🚀`);

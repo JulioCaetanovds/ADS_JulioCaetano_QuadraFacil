@@ -1,5 +1,9 @@
 // lib/features/home/presentation/pages/owner_home_page.dart
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:quadrafacil/features/authentication/presentation/pages/login_page.dart';
 import 'package:quadrafacil/features/home/presentation/pages/add_edit_court_page.dart';
@@ -8,7 +12,94 @@ import 'package:quadrafacil/features/owner_panel/presentation/pages/edit_owner_p
 import 'package:quadrafacil/features/owner_panel/presentation/pages/payment_settings_page.dart';
 import 'package:quadrafacil/features/owner_panel/presentation/pages/reports_page.dart';
 
-// ABA AGENDA (RF04, RF07) - ATUALIZADA COM NAVEGAÇÃO
+// ABA MEUS ESPAÇOS (RF03) - AGORA COM LÓGICA DE DADOS
+class MyCourtsTab extends StatefulWidget {
+  const MyCourtsTab({super.key});
+
+  @override
+  State<MyCourtsTab> createState() => _MyCourtsTabState();
+}
+
+class _MyCourtsTabState extends State<MyCourtsTab> {
+  List<dynamic> _courts = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCourts(); // Chama a função para buscar as quadras quando a tela inicia
+  }
+
+  Future<void> _fetchCourts() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuário não autenticado.');
+
+      final idToken = await user.getIdToken(true);
+      
+      // Lembre-se de usar seu IP local
+      final url = Uri.parse('http://192.168.10.196:3000/courts');
+      
+      final response = await http.get(
+        url,
+        headers: { 'Authorization': 'Bearer $idToken' },
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          setState(() {
+            _courts = jsonDecode(response.body);
+            _isLoading = false;
+          });
+        }
+      } else {
+        throw Exception('Falha ao carregar quadras: ${response.body}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Meus Espaços'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchCourts, // Botão para recarregar a lista
+            tooltip: 'Atualizar',
+          )
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator()) // Mostra loading
+          : _courts.isEmpty
+              ? const Center(child: Text('Nenhum espaço cadastrado ainda.')) // Mostra se a lista estiver vazia
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: _courts.length,
+                  itemBuilder: (context, index) {
+                    final court = _courts[index];
+                    return OwnedCourtListItem(
+                      courtId: court['id'],
+                      nome: court['nome'] ?? 'Nome indisponível',
+                      ocupacao: 0, // Placeholder
+                      status: 'Ativo', // Placeholder
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+// ABA AGENDA (RF04, RF07)
 class OwnerAgendaTab extends StatelessWidget {
   const OwnerAgendaTab({super.key});
   @override
@@ -43,7 +134,7 @@ class OwnerAgendaTab extends StatelessWidget {
   }
 }
 
-// ABA PERFIL (RF02) - ATUALIZADA COM NAVEGAÇÃO
+// ABA PERFIL (RF02)
 class OwnerProfileTab extends StatelessWidget {
   const OwnerProfileTab({super.key});
   @override
@@ -128,35 +219,20 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
   }
 }
 
-// ABA MEUS ESPAÇOS (RF03)
-class MyCourtsTab extends StatelessWidget {
-  const MyCourtsTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Meus Espaços'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: const [
-          OwnedCourtListItem(nome: 'Quadra Central', ocupacao: 75, status: 'Ativo'),
-          OwnedCourtListItem(nome: 'Arena Litoral', ocupacao: 40, status: 'Ativo'),
-          OwnedCourtListItem(nome: 'Ginásio do Bairro', ocupacao: 0, status: 'Inativo'),
-        ],
-      ),
-    );
-  }
-}
-
-// WIDGET REUTILIZÁVEL PARA ITEM DA LISTA DE QUADRAS DO DONO
+// WIDGET REUTILIZÁVEL PARA ITEM DA LISTA DE QUADRAS DO DONO - CORRIGIDO
 class OwnedCourtListItem extends StatelessWidget {
+  final String courtId;
   final String nome;
   final int ocupacao;
   final String status;
 
-  const OwnedCourtListItem({super.key, required this.nome, required this.ocupacao, required this.status});
+  const OwnedCourtListItem({
+    super.key, 
+    required this.courtId, 
+    required this.nome, 
+    required this.ocupacao, 
+    required this.status
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -172,7 +248,10 @@ class OwnedCourtListItem extends StatelessWidget {
           size: 12,
         ),
         onTap: () {
-          Navigator.of(context).push(MaterialPageRoute(builder: (context) => AddEditCourtPage(courtName: nome)));
+          // Agora navega para a tela de edição, passando o ID correto
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => AddEditCourtPage(courtId: courtId))
+          );
         },
       ),
     );
