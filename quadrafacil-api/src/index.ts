@@ -17,7 +17,7 @@ app.use(express.json());
 
 // Rota principal
 app.get('/', (req: Request, res: Response) => {
-  res.status(200).json({ message: 'Bem-vindo à API do Quadra Fácil!' });
+  res.status(200).json({ message: 'Bem vindo à API do Quadra Fácil!' });
 });
 
 // Nossas rotas

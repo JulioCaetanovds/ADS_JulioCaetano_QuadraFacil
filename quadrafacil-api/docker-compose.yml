@@ -1,0 +1,24 @@
+version: '3.8' # Define a versão da sintaxe do Compose
+
+services: # Define os contêineres (serviços) que vamos rodar
+  api: # Nome do nosso serviço (pode ser qualquer nome)
+    container_name: quadrafacil-api-dev # Nome que o contêiner terá no Docker Desktop
+    build: 
+      context: . # Diz para construir a imagem usando o Dockerfile na pasta atual (.)
+      target: builder # Especificamos para usar até o estágio 'builder' (inclui devDependencies) para desenvolvimento
+    ports:
+      # Mapeia a porta 3000 da SUA MÁQUINA para a porta 3000 DENTRO do contêiner
+      - "3000:3000" 
+    volumes:
+      # Mapeia a pasta 'src' do seu PC para '/app/src' dentro do contêiner
+      # Isso permite que o nodemon veja suas alterações de código em tempo real!
+      - ./src:/app/src 
+      # Mapeia o tsconfig.json para dentro do contêiner
+      - ./tsconfig.json:/app/tsconfig.json
+      # Cria um volume anônimo para node_modules para evitar sobrescrever com o do PC
+      # Isso garante que as dependências corretas (instaladas no Dockerfile) sejam usadas.
+      - /app/node_modules 
+    command: npm run dev # Comando para iniciar o serviço (sobrescreve o CMD do Dockerfile)
+    environment:
+      # Força o Nodemon a usar um método de polling que funciona melhor com volumes mapeados
+      - CHOKIDAR_USEPOLLING=true
