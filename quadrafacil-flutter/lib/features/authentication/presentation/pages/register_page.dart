@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:quadrafacil/core/theme/app_theme.dart';
+import 'package:quadrafacil/core/config.dart';
 
 enum UserRole { atleta, dono }
 
@@ -35,8 +36,7 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    // Lembre-se de usar o IP da sua máquina
-    final url = Uri.parse('http://192.168.10.196:3000/auth/register');
+    final url = Uri.parse('${AppConfig.apiUrl}/auth/register');
 
     try {
       final response = await http.post(

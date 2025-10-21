@@ -8,6 +8,7 @@ import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:quadrafacil/features/authentication/presentation/pages/register_page.dart';
 import 'package:quadrafacil/features/home/presentation/pages/athlete_home_page.dart';
 import 'package:quadrafacil/features/home/presentation/pages/owner_home_page.dart';
+import 'package:quadrafacil/core/config.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -86,8 +87,7 @@ class _LoginPageState extends State<LoginPage> {
 
   // Função para testar a API
   Future<void> _testApiProtectedRoute(String idToken) async {
-  // Lembre-se de usar seu IP local
-  final url = Uri.parse('http://192.168.10.196:3000/auth/me'); 
+  final url = Uri.parse('${AppConfig.apiUrl}/auth/me'); 
 
   try {
     final response = await http.get(
