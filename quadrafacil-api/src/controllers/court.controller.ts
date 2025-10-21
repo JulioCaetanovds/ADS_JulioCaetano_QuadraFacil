@@ -92,3 +92,66 @@ export const getCourtById = async (req: Request, res: Response) => {
     return res.status(500).json({ message: 'Erro interno ao buscar quadra.' });
   }
 };
+
+export const updateCourt = async (req: Request, res: Response) => {
+  try {
+    const ownerId = req.currentUser?.uid;
+    const { courtId } = req.params; // Pega o ID da quadra pela URL
+    const courtData = req.body; // Pega os novos dados (nome, descricao, etc.) do corpo
+
+    // Busca a quadra para garantir que o dono é o mesmo
+    const courtRef = db.collection('quadras').doc(courtId);
+    const courtDoc = await courtRef.get();
+
+    if (!courtDoc.exists) {
+      return res.status(404).json({ message: 'Quadra não encontrada.' });
+    }
+    
+    // Verificação de segurança
+    if (courtDoc.data()?.ownerId !== ownerId) {
+      return res.status(403).json({ message: 'Acesso negado. Você não é o dono desta quadra.' });
+    }
+
+    // Atualiza o documento no Firestore com os novos dados
+    await courtRef.update(courtData);
+
+    return res.status(200).json({ 
+      message: 'Quadra atualizada com sucesso!',
+      updatedData: courtData 
+    });
+
+  } catch (error) {
+    console.error('Erro ao atualizar quadra:', error);
+    return res.status(500).json({ message: 'Erro interno ao atualizar quadra.' });
+  }
+};
+
+// --- Função para DELETAR uma quadra ---
+export const deleteCourt = async (req: Request, res: Response) => {
+  try {
+    const ownerId = req.currentUser?.uid;
+    const { courtId } = req.params; // Pega o ID da quadra pela URL
+
+    // Busca a quadra para garantir que o dono é o mesmo
+    const courtRef = db.collection('quadras').doc(courtId);
+    const courtDoc = await courtRef.get();
+
+    if (!courtDoc.exists) {
+      return res.status(404).json({ message: 'Quadra não encontrada.' });
+    }
+    
+    // Verificação de segurança
+    if (courtDoc.data()?.ownerId !== ownerId) {
+      return res.status(403).json({ message: 'Acesso negado. Você não é o dono desta quadra.' });
+    }
+
+    // Deleta o documento no Firestore
+    await courtRef.delete();
+
+    return res.status(200).json({ message: 'Quadra excluída com sucesso!' });
+
+  } catch (error) {
+    console.error('Erro ao excluir quadra:', error);
+    return res.status(500).json({ message: 'Erro interno ao excluir quadra.' });
+  }
+};

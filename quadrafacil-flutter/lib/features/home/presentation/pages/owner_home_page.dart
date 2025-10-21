@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import 'package:quadrafacil/core/config.dart'; // Import da configuração de URL
 import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:quadrafacil/features/authentication/presentation/pages/login_page.dart';
 import 'package:quadrafacil/features/home/presentation/pages/add_edit_court_page.dart';
@@ -14,6 +15,7 @@ import 'package:quadrafacil/features/owner_panel/presentation/pages/reports_page
 
 // ABA MEUS ESPAÇOS (RF03) - AGORA COM LÓGICA DE DADOS
 class MyCourtsTab extends StatefulWidget {
+  // Adicionamos a key aqui para podermos chamar o refresh externamente se necessário
   const MyCourtsTab({super.key});
 
   @override
@@ -30,19 +32,23 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
     _fetchCourts(); // Chama a função para buscar as quadras quando a tela inicia
   }
 
+  // Função pública para poder ser chamada de fora (ex: após salvar)
   Future<void> _fetchCourts() async {
+    // Garante que o loading seja exibido se já não estiver
+    if (!_isLoading) {
+      setState(() => _isLoading = true);
+    }
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Usuário não autenticado.');
 
       final idToken = await user.getIdToken(true);
-      
-      // Lembre-se de usar seu IP local
-      final url = Uri.parse('http://192.168.10.196:3000/courts');
-      
+
+      final url = Uri.parse('${AppConfig.apiUrl}/courts');
+
       final response = await http.get(
         url,
-        headers: { 'Authorization': 'Bearer $idToken' },
+        headers: {'Authorization': 'Bearer $idToken'},
       );
 
       if (response.statusCode == 200) {
@@ -58,11 +64,23 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text(e.toString().replaceAll('Exception: ', '')),
+              backgroundColor: Colors.red),
         );
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  // Função para lidar com o retorno da tela de Adicionar/Editar
+  Future<void> _handleNavigationResult(dynamic result) async {
+     if (result == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text('Operação realizada com sucesso! Atualizando lista...'), backgroundColor: Colors.green)
+         );
+         await _fetchCourts(); // Recarrega a lista
+     }
   }
 
   @override
@@ -81,20 +99,42 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator()) // Mostra loading
           : _courts.isEmpty
-              ? const Center(child: Text('Nenhum espaço cadastrado ainda.')) // Mostra se a lista estiver vazia
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16.0),
-                  itemCount: _courts.length,
-                  itemBuilder: (context, index) {
-                    final court = _courts[index];
-                    return OwnedCourtListItem(
-                      courtId: court['id'],
-                      nome: court['nome'] ?? 'Nome indisponível',
-                      ocupacao: 0, // Placeholder
-                      status: 'Ativo', // Placeholder
-                    );
-                  },
+              ? const Center(
+                  child: Text('Nenhum espaço cadastrado ainda.')) // Mostra se a lista estiver vazia
+              : RefreshIndicator( // Permite "puxar para atualizar"
+                  onRefresh: _fetchCourts,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16.0),
+                    itemCount: _courts.length,
+                    itemBuilder: (context, index) {
+                      final court = _courts[index];
+                      return OwnedCourtListItem(
+                        courtId: court['id'],
+                        nome: court['nome'] ?? 'Nome indisponível',
+                        ocupacao: 0, // Placeholder
+                        status: 'Ativo', // Placeholder
+                        onTap: () async { // Navega e espera o resultado
+                          final result = await Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => AddEditCourtPage(courtId: court['id']))
+                          );
+                          _handleNavigationResult(result);
+                        }
+                      );
+                    },
+                  ),
                 ),
+       floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async { // Navega e espera o resultado
+          final result = await Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const AddEditCourtPage())
+          );
+           _handleNavigationResult(result);
+        },
+        label: const Text('Novo Espaço'),
+        icon: const Icon(Icons.add),
+        backgroundColor: AppTheme.primaryColor,
+        foregroundColor: Colors.white,
+      ),
     );
   }
 }
@@ -104,33 +144,46 @@ class OwnerAgendaTab extends StatelessWidget {
   const OwnerAgendaTab({super.key});
   @override
   Widget build(BuildContext context) {
+    // Dados de exemplo - MANTIDOS POR ENQUANTO
     final bookings = [
-      BookingData(quadra: 'Quadra Central', cliente: 'Carlos Silva', horario: '19:00 - 20:00', status: 'Confirmada'),
-      BookingData(quadra: 'Quadra Central', cliente: 'Fernanda Lima', horario: '20:00 - 21:00', status: 'Confirmada'),
-      BookingData(quadra: 'Arena Litoral', cliente: 'Grupo Amigos', horario: '21:00 - 22:00', status: 'Pendente'),
+      BookingData(
+          quadra: 'Quadra Central',
+          cliente: 'Carlos Silva',
+          horario: '19:00 - 20:00',
+          status: 'Confirmada'),
+      BookingData(
+          quadra: 'Quadra Central',
+          cliente: 'Fernanda Lima',
+          horario: '20:00 - 21:00',
+          status: 'Confirmada'),
+      BookingData(
+          quadra: 'Arena Litoral',
+          cliente: 'Grupo Amigos',
+          horario: '21:00 - 22:00',
+          status: 'Pendente'),
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Agenda de Hoje')),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16.0),
-        itemCount: bookings.length,
-        itemBuilder: (context, index) {
-          final booking = bookings[index];
-          return BookingListItem(
-            quadra: booking.quadra,
-            data: 'Cliente: ${booking.cliente}',
-            horario: booking.horario,
-            status: booking.status,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => BookingDetailsPage(booking: booking)),
-              );
-            },
-          );
-        },
-      )
-    );
+        appBar: AppBar(title: const Text('Agenda de Hoje')),
+        body: ListView.builder(
+          padding: const EdgeInsets.all(16.0),
+          itemCount: bookings.length,
+          itemBuilder: (context, index) {
+            final booking = bookings[index];
+            return BookingListItem(
+              quadra: booking.quadra,
+              data: 'Cliente: ${booking.cliente}',
+              horario: booking.horario,
+              status: booking.status,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (context) => BookingDetailsPage(booking: booking)),
+                );
+              },
+            );
+          },
+        ));
   }
 }
 
@@ -144,21 +197,43 @@ class OwnerProfileTab extends StatelessWidget {
       body: ListView(
         children: [
           const SizedBox(height: 24),
-          const CircleAvatar(radius: 50, backgroundColor: AppTheme.primaryColor, child: Icon(Icons.store, size: 60, color: Colors.white)),
+          const CircleAvatar(
+              radius: 50,
+              backgroundColor: AppTheme.primaryColor,
+              child: Icon(Icons.store, size: 60, color: Colors.white)),
           const SizedBox(height: 12),
-          const Text('Júlio Caetano (Dono)', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const Text('dono@email.com', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: AppTheme.hintColor)),
+          const Text('Júlio Caetano (Dono)',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const Text('dono@email.com',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, color: AppTheme.hintColor)),
           const SizedBox(height: 32),
           const Divider(),
-          ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Editar Perfil'), trailing: const Icon(Icons.chevron_right), onTap: () {
-             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const EditOwnerProfilePage()));
-          }),
-          ListTile(leading: const Icon(Icons.account_balance_wallet_outlined), title: const Text('Configurações de Pagamento'), trailing: const Icon(Icons.chevron_right), onTap: () {
-             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PaymentSettingsPage()));
-          }),
-          ListTile(leading: const Icon(Icons.bar_chart_outlined), title: const Text('Relatórios'), trailing: const Icon(Icons.chevron_right), onTap: () {
-             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ReportsPage()));
-          }),
+          ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Editar Perfil'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => const EditOwnerProfilePage()));
+              }),
+          ListTile(
+              leading: const Icon(Icons.account_balance_wallet_outlined),
+              title: const Text('Configurações de Pagamento'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => const PaymentSettingsPage()));
+              }),
+          ListTile(
+              leading: const Icon(Icons.bar_chart_outlined),
+              title: const Text('Relatórios'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => const ReportsPage()));
+              }),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
@@ -187,51 +262,61 @@ class OwnerHomePage extends StatefulWidget {
 class _OwnerHomePageState extends State<OwnerHomePage> {
   int _selectedIndex = 0;
 
-  static const List<Widget> _tabs = <Widget>[
-    MyCourtsTab(),
-    OwnerAgendaTab(),
-    OwnerProfileTab(),
-  ];
+  // Key para podermos chamar o refresh da lista de quadras
+  final GlobalKey<_MyCourtsTabState> myCourtsTabKey = GlobalKey<_MyCourtsTabState>();
+
+  late final List<Widget> _tabs;
+
+  @override
+  void initState() {
+    super.initState();
+     _tabs = <Widget>[
+      MyCourtsTab(key: myCourtsTabKey), // Passamos a key aqui
+      const OwnerAgendaTab(),
+      const OwnerProfileTab(),
+    ];
+  }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _tabs[_selectedIndex],
-      floatingActionButton: _selectedIndex == 0 ? FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AddEditCourtPage()));
-        },
-        label: const Text('Novo Espaço'),
-        icon: const Icon(Icons.add),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-      ) : null,
+      body: IndexedStack( // Usamos IndexedStack para manter o estado das abas
+        index: _selectedIndex,
+        children: _tabs,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
         items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Icons.store_mall_directory_outlined), label: 'Meus Espaços'),
-          BottomNavigationBarItem(icon: Icon(Icons.event_note_outlined), label: 'Agenda'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.store_mall_directory_outlined),
+              label: 'Meus Espaços'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.event_note_outlined), label: 'Agenda'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline), label: 'Perfil'),
         ],
       ),
     );
   }
 }
 
-// WIDGET REUTILIZÁVEL PARA ITEM DA LISTA DE QUADRAS DO DONO - CORRIGIDO
+// WIDGET REUTILIZÁVEL PARA ITEM DA LISTA DE QUADRAS DO DONO
 class OwnedCourtListItem extends StatelessWidget {
   final String courtId;
   final String nome;
   final int ocupacao;
   final String status;
+  final VoidCallback? onTap; // Adicionado onTap para navegação
 
   const OwnedCourtListItem({
-    super.key, 
-    required this.courtId, 
-    required this.nome, 
-    required this.ocupacao, 
-    required this.status
+    super.key,
+    required this.courtId,
+    required this.nome,
+    required this.ocupacao,
+    required this.status,
+    this.onTap, // Adicionado
   });
 
   @override
@@ -247,12 +332,7 @@ class OwnedCourtListItem extends StatelessWidget {
           color: status == 'Ativo' ? Colors.green : Colors.grey,
           size: 12,
         ),
-        onTap: () {
-          // Agora navega para a tela de edição, passando o ID correto
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => AddEditCourtPage(courtId: courtId))
-          );
-        },
+        onTap: onTap, // Usa o onTap passado
       ),
     );
   }
@@ -274,10 +354,14 @@ class BookingListItem extends StatelessWidget {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Confirmada': return Colors.green;
-      case 'Pendente': return Colors.orange;
-      case 'Cancelada': return Colors.red;
-      default: return Colors.grey;
+      case 'Confirmada':
+        return Colors.green;
+      case 'Pendente':
+        return Colors.orange;
+      case 'Cancelada':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -287,12 +371,14 @@ class BookingListItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: const Icon(Icons.receipt_long_outlined, color: AppTheme.primaryColor, size: 40),
+        leading: const Icon(Icons.receipt_long_outlined,
+            color: AppTheme.primaryColor, size: 40),
         title: Text(quadra, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('$data • $horario'),
         trailing: Text(
           status.toUpperCase(),
-          style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold),
+          style:
+              TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold),
         ),
         onTap: onTap,
       ),

@@ -1,24 +1,30 @@
 // src/index.ts
 import express, { Request, Response } from 'express';
-import { db } from './config/firebase'; // Verificando que a conexão está importada
-import authRouter from './routes/auth.routes'; // 1. Importamos nossas novas rotas
+import cors from 'cors'; // Import do cors
+import { db } from './config/firebase';
+import authRouter from './routes/auth.routes';
 import courtRouter from './routes/court.routes';
 
 const app = express();
 const PORT = 3000;
 
+// Habilita o CORS para todas as origens (deve vir antes das rotas!)
+app.use(cors()); 
+// --------------------
+
+// Habilita o Express para entender JSON
 app.use(express.json());
 
-// A rota principal continua funcionando
+// Rota principal
 app.get('/', (req: Request, res: Response) => {
   res.status(200).json({ message: 'Bem-vindo à API do Quadra Fácil!' });
 });
 
-// 2. Dizemos ao Express para usar nosso roteador de autenticação
-// Todas as rotas dentro de authRouter terão o prefixo '/auth'
+// Nossas rotas
 app.use('/auth', authRouter);
 app.use('/courts', courtRouter);
 
+// Inicia o servidor
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT} 🚀`);
 });
