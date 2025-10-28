@@ -64,6 +64,7 @@ class _LoginPageState extends State<LoginPage> {
       }
       
       print('====================== ID TOKEN PARA API ======================');
+      print('Comprimento no Flutter: ${idToken.length}');
       print(idToken);
       print('===============================================================');
 

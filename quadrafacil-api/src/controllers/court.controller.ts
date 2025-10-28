@@ -155,3 +155,59 @@ export const deleteCourt = async (req: Request, res: Response) => {
     return res.status(500).json({ message: 'Erro interno ao excluir quadra.' });
   }
 };
+
+// --- Função para DEFINIR/ATUALIZAR a disponibilidade de uma quadra ---
+export const setCourtAvailability = async (req: Request, res: Response) => {
+  try {
+    const ownerId = req.currentUser?.uid;
+    const { courtId } = req.params;
+    const availabilityData = req.body; // Espera receber um objeto como o exemplo acima
+
+    // Validação básica (poderia ser mais robusta)
+    if (!availabilityData || typeof availabilityData !== 'object') {
+       return res.status(400).json({ message: 'Dados de disponibilidade inválidos.' });
+    }
+
+    const courtRef = db.collection('quadras').doc(courtId);
+    const courtDoc = await courtRef.get();
+
+    if (!courtDoc.exists) {
+      return res.status(404).json({ message: 'Quadra não encontrada.' });
+    }
+    if (courtDoc.data()?.ownerId !== ownerId) {
+      return res.status(403).json({ message: 'Acesso negado.' });
+    }
+
+    // Atualiza APENAS o campo 'availability' no documento da quadra
+    // O 'merge: true' garante que outros campos não sejam apagados
+    await courtRef.set({ availability: availabilityData }, { merge: true });
+
+    return res.status(200).json({ message: 'Disponibilidade atualizada com sucesso!' });
+
+  } catch (error) {
+    console.error('Erro ao definir disponibilidade:', error);
+    return res.status(500).json({ message: 'Erro interno ao definir disponibilidade.' });
+  }
+};
+
+// --- Função para BUSCAR a disponibilidade de uma quadra ---
+export const getCourtAvailability = async (req: Request, res: Response) => {
+  try {
+    const { courtId } = req.params;
+    const courtRef = db.collection('quadras').doc(courtId);
+    const courtDoc = await courtRef.get();
+
+    if (!courtDoc.exists) {
+      return res.status(404).json({ message: 'Quadra não encontrada.' });
+    }
+
+    const courtData = courtDoc.data();
+    const availability = courtData?.availability || {}; // Retorna objeto vazio se não houver dados
+
+    return res.status(200).json(availability);
+
+  } catch (error) {
+    console.error('Erro ao buscar disponibilidade:', error);
+    return res.status(500).json({ message: 'Erro interno ao buscar disponibilidade.' });
+  }
+};

@@ -7,13 +7,14 @@ import 'dart:convert';
 import 'package:quadrafacil/core/config.dart'; // Import da configuração de URL
 import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:quadrafacil/features/authentication/presentation/pages/login_page.dart';
+// Import correto da AddEditCourtPage
 import 'package:quadrafacil/features/home/presentation/pages/add_edit_court_page.dart';
 import 'package:quadrafacil/features/owner_panel/presentation/pages/booking_details_page.dart';
 import 'package:quadrafacil/features/owner_panel/presentation/pages/edit_owner_profile_page.dart';
 import 'package:quadrafacil/features/owner_panel/presentation/pages/payment_settings_page.dart';
 import 'package:quadrafacil/features/owner_panel/presentation/pages/reports_page.dart';
 
-// ABA MEUS ESPAÇOS (RF03) - AGORA COM LÓGICA DE DADOS
+// ABA MEUS ESPAÇOS (RF03) - COM LÓGICA DE DADOS E REFRESH
 class MyCourtsTab extends StatefulWidget {
   // Adicionamos a key aqui para podermos chamar o refresh externamente se necessário
   const MyCourtsTab({super.key});
@@ -35,6 +36,7 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
   // Função pública para poder ser chamada de fora (ex: após salvar)
   Future<void> _fetchCourts() async {
     // Garante que o loading seja exibido se já não estiver
+    if (!mounted) return; // Checagem extra de montagem
     if (!_isLoading) {
       setState(() => _isLoading = true);
     }
@@ -99,8 +101,20 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator()) // Mostra loading
           : _courts.isEmpty
-              ? const Center(
-                  child: Text('Nenhum espaço cadastrado ainda.')) // Mostra se a lista estiver vazia
+              ? Center(
+                  child: Column( // Mensagem centralizada com botão refresh
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                     const Text('Nenhum espaço cadastrado ainda.'),
+                     const SizedBox(height: 16),
+                     ElevatedButton.icon(
+                       onPressed: _fetchCourts,
+                       icon: const Icon(Icons.refresh),
+                       label: const Text('Tentar Novamente'),
+                      )
+                    ],
+                  )
+                )
               : RefreshIndicator( // Permite "puxar para atualizar"
                   onRefresh: _fetchCourts,
                   child: ListView.builder(
@@ -263,6 +277,8 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
   int _selectedIndex = 0;
 
   // Key para podermos chamar o refresh da lista de quadras
+  // Embora tenhamos a função _handleNavigationResult agora, a key pode ser útil
+  // para outras interações futuras entre abas, então vamos mantê-la por enquanto.
   final GlobalKey<_MyCourtsTabState> myCourtsTabKey = GlobalKey<_MyCourtsTabState>();
 
   late final List<Widget> _tabs;

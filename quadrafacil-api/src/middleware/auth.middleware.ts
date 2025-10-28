@@ -22,7 +22,12 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
   }
 
   // O token vem no formato "Bearer <token>", então pegamos só a segunda parte
-  const idToken = authorization.split('Bearer ')[1];
+  const idToken = authorization.split('Bearer ')[1].trim();
+
+  console.log('--- TOKEN RECEBIDO PELA API ---');
+  console.log(`Comprimento na API: ${idToken.length}`);
+  console.log(idToken);
+  console.log('--- FIM DO TOKEN RECEBIDO ---');
 
   try {
     // 2. Usa o Firebase Admin para verificar se o token é válido
@@ -33,8 +38,14 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
     
     // 4. Chama a próxima função na cadeia (o controller da rota)
     return next();
-  } catch (error) {
-    console.error('Erro ao verificar token:', error);
+  } catch (error: any) { // Usamos 'any' para poder inspecionar o objeto de erro
+    // Logs detalhados em caso de falha na verificação
+    console.error('--- ERRO DETALHADO AO VERIFICAR TOKEN ---'); 
+    console.error(error); // Loga o objeto de erro completo
+    if (error.code) { // Verifica se é um erro específico do Firebase com código
+      console.error('Código do erro Firebase:', error.code); 
+    }
+    console.error('-----------------------------------------'); 
     return res.status(401).json({ message: 'Não autorizado: Token inválido ou expirado.' });
   }
 };
