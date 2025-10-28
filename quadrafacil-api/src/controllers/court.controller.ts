@@ -211,3 +211,22 @@ export const getCourtAvailability = async (req: Request, res: Response) => {
     return res.status(500).json({ message: 'Erro interno ao buscar disponibilidade.' });
   }
 };
+
+export const getAllPublicCourts = async (req: Request, res: Response) => {
+  try {
+    // Busca todas as quadras na coleção
+    const courtsSnapshot = await db.collection('quadras').get();
+
+    // Transforma o resultado em uma lista
+    const courtsList = courtsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return res.status(200).json(courtsList);
+
+  } catch (error) {
+    console.error('Erro ao buscar todas as quadras:', error);
+    return res.status(500).json({ message: 'Erro interno ao buscar quadras.' });
+  }
+};

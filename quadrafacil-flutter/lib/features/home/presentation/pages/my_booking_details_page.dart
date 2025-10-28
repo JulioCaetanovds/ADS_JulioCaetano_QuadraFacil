@@ -1,16 +1,10 @@
-// lib/features/home/presentation/pages/my_booking_details_page.dart
 import 'package:flutter/material.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
+// 1. Importa o modelo compartilhado
+import 'package:quadrafacil/shared/models/booking_data.dart';
 
-// Usaremos a mesma classe de dados de antes para passar a informação
-class BookingData {
-  final String quadra;
-  final String data;
-  final String horario;
-  final String status;
-
-  BookingData({required this.quadra, required this.data, required this.horario, required this.status});
-}
+// 2. Remove a definição duplicada da classe BookingData daqui
+// class BookingData { ... }
 
 class MyBookingDetailsPage extends StatelessWidget {
   final BookingData booking;
@@ -26,7 +20,6 @@ class MyBookingDetailsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(24.0),
         children: [
-          // Card principal com as informações
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -38,12 +31,14 @@ class MyBookingDetailsPage extends StatelessWidget {
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text('Centro, Passo Fundo - RS', style: TextStyle(color: AppTheme.hintColor)), // Endereço de exemplo
+                  // TODO: Buscar endereço real da quadra se necessário
+                  const Text('Endereço da Quadra Aqui', style: TextStyle(color: AppTheme.hintColor)),
                   const SizedBox(height: 16),
                   const Divider(),
                   _buildDetailRow(icon: Icons.calendar_today_outlined, title: 'Data', value: booking.data),
                   _buildDetailRow(icon: Icons.access_time_outlined, title: 'Horário', value: booking.horario),
-                  _buildDetailRow(icon: Icons.receipt_long_outlined, title: 'Valor Pago', value: 'R\$ 80,00'), // Valor de exemplo
+                   // TODO: Buscar valor real da reserva se necessário
+                  _buildDetailRow(icon: Icons.receipt_long_outlined, title: 'Valor Pago', value: 'R\$ --,--'),
                   _buildDetailRow(icon: Icons.info_outline, title: 'Status', value: booking.status),
                 ],
               ),
@@ -51,11 +46,14 @@ class MyBookingDetailsPage extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          // Botões de Ação para o Atleta
+          // Botão de Cancelar (Apenas se não estiver finalizada ou cancelada)
           if (booking.status != 'Finalizada' && booking.status != 'Cancelada')
             OutlinedButton.icon(
               onPressed: () {
-                // Lógica para cancelar a reserva
+                // TODO: Implementar lógica de cancelamento (chamar API)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Funcionalidade de cancelamento em breve!')),
+                );
               },
               icon: const Icon(Icons.cancel_outlined),
               label: const Text('Cancelar Reserva'),
@@ -66,7 +64,6 @@ class MyBookingDetailsPage extends StatelessWidget {
     );
   }
 
-  // Widget auxiliar para as linhas de detalhe
   Widget _buildDetailRow({required IconData icon, required String title, required String value}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),

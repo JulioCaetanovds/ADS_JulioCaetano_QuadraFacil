@@ -28,7 +28,7 @@ class AvailabilityDay {
       return null; // Retorna null se estiver fechado ou incompleto
     }
     try {
-      final formatTime = (TimeOfDay time) => '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+      String formatTime(TimeOfDay time) => '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
       // Converte vírgula para ponto antes de fazer o parse
       final priceValue = double.tryParse(priceController.text.replaceAll(',', '.')) ?? 0.0;
       return {
@@ -48,10 +48,10 @@ class AvailabilityDay {
       return AvailabilityDay(isOpen: false);
     }
     try {
-      final parseTime = (String timeStr) {
+      TimeOfDay parseTime(String timeStr) {
          final parts = timeStr.split(':');
          return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-      };
+      }
       // Formata o preço vindo da API para exibir corretamente
       final priceString = json['pricePerHour']?.toStringAsFixed(2).replaceAll('.', ',') ?? '';
       return AvailabilityDay(
@@ -83,7 +83,7 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
   final _addressController = TextEditingController();
   final _rulesController = TextEditingController();
 
-  Map<String, AvailabilityDay> _availability = {
+  final Map<String, AvailabilityDay> _availability = {
     'segunda': AvailabilityDay(),
     'terca': AvailabilityDay(),
     'quarta': AvailabilityDay(),
@@ -141,9 +141,9 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
           _addressController.text = courtData['endereco'] ?? '';
           _rulesController.text = courtData['regras'] ?? '';
 
-           _daysOfWeek.forEach((day) {
+           for (var day in _daysOfWeek) {
              _availability[day] = AvailabilityDay.fromJson(availabilityData[day]);
-           });
+           }
         });
       }
     } catch (e) {
@@ -369,7 +369,7 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
 
   // Widget Auxiliar para Linha de Disponibilidade
   Widget _buildAvailabilityRow(String dayName, AvailabilityDay dayData) {
-    final formatTime = (TimeOfDay? time) => time == null ? 'HH:MM' : '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    String formatTime(TimeOfDay? time) => time == null ? 'HH:MM' : '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),

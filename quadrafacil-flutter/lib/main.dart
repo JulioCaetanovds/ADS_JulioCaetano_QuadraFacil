@@ -6,7 +6,8 @@ import 'package:quadrafacil/features/authentication/presentation/pages/auth_chec
 import 'package:quadrafacil/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
-
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 
 // A função main agora é async para podermos esperar o Firebase
@@ -18,6 +19,8 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  await initializeDateFormatting('pt_BR', null);
 
   // O resto do código que já tínhamos
   final prefs = await SharedPreferences.getInstance();
@@ -36,6 +39,15 @@ class QuadraFacilApp extends StatelessWidget {
       title: 'Quadra Fácil',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('pt', 'BR'),
+      ],
+      locale: const Locale('pt', 'BR'),
       // A tela inicial agora é decidida pela variável showOnboarding
       home: showOnboarding ? const OnboardingPage() : const AuthCheckPage(),
     );
