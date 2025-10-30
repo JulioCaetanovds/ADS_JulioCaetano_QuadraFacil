@@ -1,3 +1,4 @@
+// lib/features/home/presentation/pages/booking_page.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -39,31 +40,31 @@ class _BookingPageState extends State<BookingPage> {
 
   // Busca o preço na API de disponibilidade
   Future<void> _fetchPrice() async {
-     setState(() => _isLoading = true); // Reutiliza o loading
-     try {
-       final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/availability');
-       final response = await http.get(url);
-       if (response.statusCode == 200 && mounted) {
-          final availabilityData = jsonDecode(response.body);
-          final dayKey = _getDayKey(widget.selectedDate); // Usa a mesma função helper
-          final dayAvailability = availabilityData[dayKey];
-          if (dayAvailability != null) {
-             setState(() {
-                _price = (dayAvailability['pricePerHour'] as num?)?.toDouble();
-             });
-          } else {
-             print("Aviso: Não foi possível encontrar preço para o dia $dayKey.");
-          }
-       } else {
-         print("Aviso: Falha ao buscar preço (${response.statusCode})");
-       }
+    setState(() => _isLoading = true); // Reutiliza o loading
+    try {
+      final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/availability');
+      final response = await http.get(url);
+      if (response.statusCode == 200 && mounted) {
+        final availabilityData = jsonDecode(response.body);
+        final dayKey = _getDayKey(widget.selectedDate); // Usa a mesma função helper
+        final dayAvailability = availabilityData[dayKey];
+        if (dayAvailability != null) {
+          setState(() {
+            _price = (dayAvailability['pricePerHour'] as num?)?.toDouble();
+          });
+        } else {
+          print("Aviso: Não foi possível encontrar preço para o dia $dayKey.");
+        }
+      } else {
+        print("Aviso: Falha ao buscar preço (${response.statusCode})");
+      }
 
-     } catch (e) {
-        print("Erro ao buscar preço: $e");
-         if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao buscar preço da reserva.'), backgroundColor: Colors.orange));
-     } finally {
-        if(mounted) setState(() => _isLoading = false);
-     }
+    } catch (e) {
+      print("Erro ao buscar preço: $e");
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao buscar preço da reserva.'), backgroundColor: Colors.orange));
+    } finally {
+      if(mounted) setState(() => _isLoading = false);
+    }
   }
 
   // Função helper para chave do dia (pode ser movida para utils)
@@ -89,14 +90,20 @@ class _BookingPageState extends State<BookingPage> {
       if (user == null) throw Exception('Usuário não autenticado.');
       final idToken = await user.getIdToken(true);
 
-      final startTime = DateTime(
+      // ---- CORREÇÃO DO FUSO HORÁRIO ----
+      // 1. Cria o DateTime local "naive" (como era antes)
+      final localStartTime = DateTime(
         widget.selectedDate.year,
         widget.selectedDate.month,
         widget.selectedDate.day,
         widget.selectedTimeSlot.hour,
         widget.selectedTimeSlot.minute,
       );
-      final endTime = startTime.add(const Duration(hours: 1));
+      
+      // 2. Converte o DateTime local para UTC
+      final startTimeUtc = localStartTime.toUtc();
+      final endTimeUtc = startTimeUtc.add(const Duration(hours: 1)); 
+      // ------------------------------------
 
       final url = Uri.parse('${AppConfig.apiUrl}/bookings');
       final response = await http.post(
@@ -107,24 +114,25 @@ class _BookingPageState extends State<BookingPage> {
         },
         body: jsonEncode({
           'courtId': widget.courtId,
-          'startTime': startTime.toIso8601String(),
-          'endTime': endTime.toIso8601String(),
+          // 3. Envia a string ISO 8601 em UTC (ex: "....Z")
+          'startTime': startTimeUtc.toIso8601String(),
+          'endTime': endTimeUtc.toIso8601String(),
           // Poderíamos enviar o preço aqui também se a API precisar
-          // 'precoTotal': _price
+          'precoTotal': _price 
         }),
       );
 
-       if (response.statusCode == 201 && mounted) {
+        if (response.statusCode == 201 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reserva solicitada! Aguardando pagamento.'), backgroundColor: Colors.green),
         );
         int count = 0;
         Navigator.of(context).popUntil((_) => count++ >= 2);
 
-       } else {
-         final error = jsonDecode(response.body);
-         throw Exception(error['message'] ?? 'Falha ao criar reserva.');
-       }
+        } else {
+          final error = jsonDecode(response.body);
+          throw Exception(error['message'] ?? 'Falha ao criar reserva.');
+        }
 
     } catch (e) {
       if (mounted) {
@@ -133,7 +141,7 @@ class _BookingPageState extends State<BookingPage> {
         );
       }
     } finally {
-       if (mounted) setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -202,4 +210,3 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 }
-

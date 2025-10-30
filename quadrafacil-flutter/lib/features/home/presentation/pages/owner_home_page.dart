@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:intl/intl.dart'; // Para formatar datas se necessário
+// Para formatar datas se necessário
 
 import 'package:quadrafacil/core/config.dart'; // Import da configuração de URL
 import 'package:quadrafacil/core/theme/app_theme.dart';
@@ -215,7 +215,7 @@ class _OwnerAgendaTabState extends State<OwnerAgendaTab> {
         body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _bookings.isEmpty
-              ? Center(child: Column( /* ... Mensagem lista vazia ... */ ))
+              ? const Center(child: Column( /* ... Mensagem lista vazia ... */ ))
               : RefreshIndicator(
                   onRefresh: _fetchBookings,
                   child: ListView.builder(

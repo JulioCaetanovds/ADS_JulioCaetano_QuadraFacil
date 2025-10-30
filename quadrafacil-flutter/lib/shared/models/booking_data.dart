@@ -1,5 +1,6 @@
+// lib/shared/models/booking_data.dart
+
 // Modelo de dados para representar uma reserva.
-// Idealmente, viria da camada de domínio.
 class BookingData {
   final String quadra;
   final String data; // Pode ser String ou DateTime dependendo da origem

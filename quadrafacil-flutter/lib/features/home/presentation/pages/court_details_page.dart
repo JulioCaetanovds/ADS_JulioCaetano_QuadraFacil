@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart'; // Import for initializeDateFormatting
+// Import for initializeDateFormatting
 
 import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
