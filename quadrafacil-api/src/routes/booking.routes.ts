@@ -1,12 +1,12 @@
-// src/routes/booking.routes.ts
-
 import { Router } from 'express';
 // Importa todas as funções do controller
 import {
   createBooking,
   getBookingsByOwner,
   getBookingsByAthlete,
-  cancelBooking, // 1. Importa a nova função de cancelamento
+  cancelBooking, // Do atleta
+  confirmBooking, // Do dono
+  rejectBooking, // Do dono
 } from '../controllers/booking.controller';
 import { isAuthenticated } from '../middleware/auth.middleware'; // Nosso "porteiro"
 
@@ -24,9 +24,15 @@ bookingRouter.get('/owner', isAuthenticated, getBookingsByOwner);
 bookingRouter.get('/athlete', isAuthenticated, getBookingsByAthlete);
 
 // DELETE /:bookingId : Atleta cancela uma reserva (requer autenticação de atleta)
-bookingRouter.delete('/:bookingId', isAuthenticated, cancelBooking); // 2. Adiciona a nova rota DELETE
+bookingRouter.delete('/:bookingId', isAuthenticated, cancelBooking);
 
-// TODO: Adicionar rotas para buscar uma reserva específica (GET /:bookingId)
-//       ou confirmar pagamento (PUT /:bookingId/confirm) etc.
+// --- NOVAS ROTAS DO DONO ---
+
+// PUT /:bookingId/confirm : Dono confirma uma reserva (requer autenticação de dono)
+bookingRouter.put('/:bookingId/confirm', isAuthenticated, confirmBooking);
+
+// PUT /:bookingId/reject : Dono recusa/cancela uma reserva (requer autenticação de dono)
+bookingRouter.put('/:bookingId/reject', isAuthenticated, rejectBooking);
+
 
 export default bookingRouter;

@@ -267,3 +267,82 @@ export const cancelBooking = async (req: Request, res: Response) => {
     return res.status(500).json({ message: 'Erro interno ao cancelar reserva.' });
   }
 };
+
+export const confirmBooking = async (req: Request, res: Response) => {
+  try {
+    const ownerId = req.currentUser?.uid; // Pega o ID do DONO logado
+    const { bookingId } = req.params;
+
+    if (!ownerId) {
+      return res.status(403).json({ message: 'Acesso negado.' });
+    }
+
+    const bookingRef = db.collection('reservas').doc(bookingId);
+    const bookingDoc = await bookingRef.get();
+
+    if (!bookingDoc.exists) {
+      return res.status(404).json({ message: 'Reserva não encontrada.' });
+    }
+    const bookingData = bookingDoc.data();
+    if (!bookingData) {
+      return res.status(404).json({ message: 'Dados da reserva não encontrados.' });
+    }
+
+    // Verifica se o usuário logado é o DONO da quadra desta reserva
+    if (bookingData.ownerId !== ownerId) {
+      return res.status(403).json({ message: 'Você não tem permissão para alterar esta reserva.' });
+    }
+
+    // Atualiza o status
+    await bookingRef.update({
+      status: 'confirmada', // MUDANÇA DE STATUS
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return res.status(200).json({ message: 'Reserva confirmada com sucesso.' });
+
+  } catch (error) {
+    console.error('Erro ao confirmar reserva:', error);
+    return res.status(500).json({ message: 'Erro interno ao confirmar reserva.' });
+  }
+};
+
+// --- Função para DONO RECUSAR (cancelar) uma reserva ---
+export const rejectBooking = async (req: Request, res: Response) => {
+  try {
+    const ownerId = req.currentUser?.uid; // Pega o ID do DONO logado
+    const { bookingId } = req.params;
+
+    if (!ownerId) {
+      return res.status(403).json({ message: 'Acesso negado.' });
+    }
+
+    const bookingRef = db.collection('reservas').doc(bookingId);
+    const bookingDoc = await bookingRef.get();
+
+    if (!bookingDoc.exists) {
+      return res.status(404).json({ message: 'Reserva não encontrada.' });
+    }
+    const bookingData = bookingDoc.data();
+    if (!bookingData) {
+      return res.status(404).json({ message: 'Dados da reserva não encontrados.' });
+    }
+
+    // Verifica se o usuário logado é o DONO da quadra desta reserva
+    if (bookingData.ownerId !== ownerId) {
+      return res.status(403).json({ message: 'Você não tem permissão para alterar esta reserva.' });
+    }
+
+    // Atualiza o status
+    await bookingRef.update({
+      status: 'cancelada', // MUDANÇA DE STATUS (ou 'rejeitada', mas 'cancelada' é mais simples)
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return res.status(200).json({ message: 'Reserva recusada/cancelada com sucesso.' });
+
+  } catch (error) {
+    console.error('Erro ao recusar reserva:', error);
+    return res.status(500).json({ message: 'Erro interno ao recusar reserva.' });
+  }
+};

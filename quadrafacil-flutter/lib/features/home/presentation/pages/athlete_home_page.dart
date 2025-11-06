@@ -10,17 +10,16 @@ import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:quadrafacil/features/authentication/presentation/pages/login_page.dart';
 import 'package:quadrafacil/features/home/presentation/pages/all_courts_page.dart';
 import 'package:quadrafacil/features/home/presentation/pages/court_details_page.dart';
-import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart';
-import 'package:quadrafacil/features/home/presentation/pages/my_booking_details_page.dart'; // Mantém este import
+import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart'; // Import da tela de detalhes da partida
+import 'package:quadrafacil/features/home/presentation/pages/my_booking_details_page.dart';
 import 'package:quadrafacil/features/home/presentation/pages/open_matches_page.dart';
 import 'package:quadrafacil/features/profile/presentation/pages/edit_profile_page.dart';
 import 'package:quadrafacil/features/profile/presentation/pages/notifications_page.dart';
 import 'package:quadrafacil/features/profile/presentation/pages/security_page.dart';
 import 'package:quadrafacil/shared/widgets/open_match_card.dart';
-// 1. Importa do 'BookingData' foi REMOVIDO
-
 
 // ABA MINHAS RESERVAS (RF07)
+// ... (Nenhuma alteração nesta classe, mantenha seu código da MyBookingsTab como está)
 class MyBookingsTab extends StatefulWidget {
   const MyBookingsTab({super.key});
 
@@ -39,7 +38,6 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
     _fetchAthleteBookings();
   }
 
-  // Busca as reservas REAIS do atleta na API
   Future<void> _fetchAthleteBookings() async {
     if (!mounted) return;
     if (!_isLoading) {
@@ -50,8 +48,9 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
       if (user == null) throw Exception('Usuário não autenticado.');
       final idToken = await user.getIdToken(true);
 
-      final url = Uri.parse('${AppConfig.apiUrl}/bookings/athlete'); // Endpoint do atleta
-      final response = await http.get(url, headers: {'Authorization': 'Bearer $idToken'});
+      final url = Uri.parse('${AppConfig.apiUrl}/bookings/athlete');
+      final response =
+          await http.get(url, headers: {'Authorization': 'Bearer $idToken'});
 
       if (response.statusCode == 200) {
         if (mounted) {
@@ -62,15 +61,15 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
 
           for (var booking in allBookings) {
             DateTime? startTime;
-            // Lida com Timestamps do Firestore vindos da API
-            if (booking['startTime'] is Map && booking['startTime']['_seconds'] != null) {
-              startTime = DateTime.fromMillisecondsSinceEpoch(booking['startTime']['_seconds'] * 1000);
+            if (booking['startTime'] is Map &&
+                booking['startTime']['_seconds'] != null) {
+              startTime = DateTime.fromMillisecondsSinceEpoch(
+                  booking['startTime']['_seconds'] * 1000);
             } else if (booking['startTime'] is String) {
               startTime = DateTime.tryParse(booking['startTime']);
             }
 
-            // Adiciona o 'parsedStartTime' ao próprio map do booking
-            booking['parsedStartTime'] = startTime; 
+            booking['parsedStartTime'] = startTime;
 
             if (startTime != null && startTime.isAfter(now)) {
               upcoming.add(booking);
@@ -79,10 +78,10 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
             }
           }
 
-          // Ordena as listas
-          upcoming.sort((a, b) => (a['parsedStartTime'] ?? DateTime(0)).compareTo(b['parsedStartTime'] ?? DateTime(0)));
-          history.sort((a, b) => (b['parsedStartTime'] ?? DateTime(0)).compareTo(a['parsedStartTime'] ?? DateTime(0)));
-
+          upcoming.sort((a, b) => (a['parsedStartTime'] ?? DateTime(0))
+              .compareTo(b['parsedStartTime'] ?? DateTime(0)));
+          history.sort((a, b) => (b['parsedStartTime'] ?? DateTime(0))
+              .compareTo(a['parsedStartTime'] ?? DateTime(0)));
 
           setState(() {
             _upcomingBookings = upcoming;
@@ -97,17 +96,18 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
       print('Erro ao buscar reservas do atleta: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text(e.toString().replaceAll('Exception: ', '')),
+              backgroundColor: Colors.red),
         );
         setState(() => _isLoading = false);
       }
     }
   }
 
-  // Formata o DateTime para exibição no item da lista
   String _formatBookingListItemTime(DateTime? dateTime) {
     if (dateTime != null) {
-      return DateFormat('dd/MM/yy HH:mm', 'pt_BR').format(dateTime); // Formato mais curto
+      return DateFormat('dd/MM/yy HH:mm', 'pt_BR').format(dateTime);
     }
     return 'Data inválida';
   }
@@ -120,19 +120,22 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
         appBar: AppBar(
           title: const Text('Minhas Reservas'),
           bottom: const TabBar(
-            tabs: [ Tab(text: 'PRÓXIMOS JOGOS'), Tab(text: 'HISTÓRICO') ],
-            labelColor: AppTheme.primaryColor, indicatorColor: AppTheme.primaryColor, unselectedLabelColor: AppTheme.hintColor,
+            tabs: [Tab(text: 'PRÓXIMOS JOGOS'), Tab(text: 'HISTÓRICO')],
+            labelColor: AppTheme.primaryColor,
+            indicatorColor: AppTheme.primaryColor,
+            unselectedLabelColor: AppTheme.hintColor,
           ),
         ),
         body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              children: [
-                // Usa as listas do ESTADO (_upcomingBookings, _historyBookings)
-                _buildBookingList(_upcomingBookings, 'Nenhum jogo agendado.'),
-                _buildBookingList(_historyBookings, 'Nenhum histórico de jogos.'),
-              ],
-            ),
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [
+                  _buildBookingList(
+                      _upcomingBookings, 'Nenhum jogo agendado.'),
+                  _buildBookingList(
+                      _historyBookings, 'Nenhum histórico de jogos.'),
+                ],
+              ),
         floatingActionButton: FloatingActionButton(
           onPressed: _fetchAthleteBookings,
           tooltip: 'Atualizar Reservas',
@@ -144,14 +147,14 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
     );
   }
 
-  // Widget auxiliar para construir as listas
   Widget _buildBookingList(List<dynamic> bookings, String emptyMessage) {
     return bookings.isEmpty
-      ? Center(
-          child: Column(
+        ? Center(
+            child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(emptyMessage, style: const TextStyle(color: AppTheme.hintColor)),
+              Text(emptyMessage,
+                  style: const TextStyle(color: AppTheme.hintColor)),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _fetchAthleteBookings,
@@ -159,67 +162,85 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
                 label: const Text('Tentar Novamente'),
               )
             ],
-          )
-        )
-      : RefreshIndicator(
-          onRefresh: _fetchAthleteBookings,
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: bookings.length,
-            itemBuilder: (context, index) {
-              final booking = bookings[index];
-              
-              // Agora a API retorna 'quadraNome', então o fallback para 'courtId' não deve ser usado
-              final quadraNome = booking['quadraNome'] ?? booking['courtId'] ?? 'Quadra N/A';
-              final horarioFormatado = _formatBookingListItemTime(booking['parsedStartTime'] as DateTime?);
-              final status = booking['status'] ?? 'N/A';
-              final dataParte = horarioFormatado.split(' ')[0];
-              final horaParte = horarioFormatado.split(' ').length > 1 ? horarioFormatado.split(' ')[1] : '';
+          ))
+        : RefreshIndicator(
+            onRefresh: _fetchAthleteBookings,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16.0),
+              itemCount: bookings.length,
+              itemBuilder: (context, index) {
+                final booking = bookings[index];
 
-              // 2. Bloco 'BookingData' REMOVIDO מכאן
+                final quadraNome =
+                    booking['quadraNome'] ?? booking['courtId'] ?? 'Quadra N/A';
+                final horarioFormatado = _formatBookingListItemTime(
+                    booking['parsedStartTime'] as DateTime?);
+                final status = booking['status'] ?? 'N/A';
+                final dataParte = horarioFormatado.split(' ')[0];
+                final horaParte = horarioFormatado.split(' ').length > 1
+                    ? horarioFormatado.split(' ')[1]
+                    : '';
 
-              return BookingListItem(
-                quadra: quadraNome,
-                data: dataParte,
-                horario: horaParte,
-                status: status,
-                // 3. Passa o MAP 'booking' completo para a tela de detalhes
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => MyBookingDetailsPage(booking: booking))
-                ),
-              );
-            },
-          ),
-        );
+                return BookingListItem(
+                  quadra: quadraNome,
+                  data: dataParte,
+                  horario: horaParte,
+                  status: status,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (context) =>
+                            MyBookingDetailsPage(booking: booking)),
+                  ),
+                );
+              },
+            ),
+          );
   }
 }
 
-
 // WIDGET REUTILIZÁVEL PARA ITEM DE RESERVA
+// ... (Nenhuma alteração nesta classe, mantenha seu código do BookingListItem como está)
 class BookingListItem extends StatelessWidget {
   final String quadra, data, horario, status;
   final VoidCallback? onTap;
-  const BookingListItem({ super.key, required this.quadra, required this.data, required this.horario, required this.status, this.onTap });
+  const BookingListItem(
+      {super.key,
+      required this.quadra,
+      required this.data,
+      required this.horario,
+      required this.status,
+      this.onTap});
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
-      case 'confirmada': return Colors.green;
-      case 'pendente': return Colors.orange;
-      case 'cancelada': return Colors.red;
-      case 'finalizada': return Colors.blueGrey;
-      default: return Colors.grey;
+      case 'confirmada':
+        return Colors.green;
+      case 'pendente':
+        return Colors.orange;
+      case 'cancelada':
+        return Colors.red;
+      case 'finalizada':
+        return Colors.blueGrey;
+      default:
+        return Colors.grey;
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: const Icon(Icons.sports_soccer, color: AppTheme.primaryColor, size: 40),
+        leading: const Icon(Icons.sports_soccer,
+            color: AppTheme.primaryColor, size: 40),
         title: Text(quadra, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('$data • $horario'),
-        trailing: Text(status.toUpperCase(), style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold, fontSize: 12)),
+        trailing: Text(status.toUpperCase(),
+            style: TextStyle(
+                color: _getStatusColor(status),
+                fontWeight: FontWeight.bold,
+                fontSize: 12)),
         onTap: onTap ?? () {},
       ),
     );
@@ -227,6 +248,7 @@ class BookingListItem extends StatelessWidget {
 }
 
 // ABA PERFIL (RF02)
+// ... (Nenhuma alteração nesta classe, mantenha seu código da ProfileTab como está)
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
 
@@ -242,36 +264,55 @@ class ProfileTab extends StatelessWidget {
         children: [
           const SizedBox(height: 24),
           CircleAvatar(
-            radius: 50, backgroundColor: AppTheme.primaryColor,
-            backgroundImage: user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
-            child: user?.photoURL == null ? const Icon(Icons.person, size: 60, color: Colors.white) : null,
+            radius: 50,
+            backgroundColor: AppTheme.primaryColor,
+            backgroundImage:
+                user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
+            child: user?.photoURL == null
+                ? const Icon(Icons.person, size: 60, color: Colors.white)
+                : null,
           ),
           const SizedBox(height: 12),
-          Text(userName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          Text(userEmail, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, color: AppTheme.hintColor)),
+          Text(userName,
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(userEmail,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, color: AppTheme.hintColor)),
           const SizedBox(height: 32),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.edit_outlined), title: const Text('Editar Perfil'), trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const EditProfilePage())),
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Editar Perfil'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const EditProfilePage())),
           ),
           ListTile(
-            leading: const Icon(Icons.notifications_outlined), title: const Text('Notificações'), trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const NotificationsPage())),
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Notificações'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (context) => const NotificationsPage())),
           ),
           ListTile(
-            leading: const Icon(Icons.security_outlined), title: const Text('Segurança'), trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SecurityPage())),
+            leading: const Icon(Icons.security_outlined),
+            title: const Text('Segurança'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SecurityPage())),
           ),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red), title: const Text('Deslogar', style: TextStyle(color: Colors.red)),
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Deslogar', style: TextStyle(color: Colors.red)),
             onTap: () async {
               await FirebaseAuth.instance.signOut();
               if (context.mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const LoginPage()), (Route<dynamic> route) => false
-                );
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                    (Route<dynamic> route) => false);
               }
             },
           ),
@@ -282,6 +323,7 @@ class ProfileTab extends StatelessWidget {
 }
 
 // HOME PAGE PRINCIPAL DO ATLETA
+// ... (Nenhuma alteração nesta classe, mantenha seu código da AthleteHomePage como está)
 class AthleteHomePage extends StatefulWidget {
   const AthleteHomePage({super.key});
   @override
@@ -290,7 +332,11 @@ class AthleteHomePage extends StatefulWidget {
 
 class _AthleteHomePageState extends State<AthleteHomePage> {
   int _selectedIndex = 0;
-  static const List<Widget> _tabs = <Widget>[ ExploreTab(), MyBookingsTab(), ProfileTab() ];
+  static const List<Widget> _tabs = <Widget>[
+    ExploreTab(),
+    MyBookingsTab(),
+    ProfileTab()
+  ];
   void _onItemTapped(int index) => setState(() => _selectedIndex = index);
 
   @override
@@ -300,16 +346,20 @@ class _AthleteHomePageState extends State<AthleteHomePage> {
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Explorar'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Minhas Reservas'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_today), label: 'Minhas Reservas'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline), label: 'Perfil'),
         ],
-        currentIndex: _selectedIndex, selectedItemColor: AppTheme.primaryColor, onTap: _onItemTapped,
+        currentIndex: _selectedIndex,
+        selectedItemColor: AppTheme.primaryColor,
+        onTap: _onItemTapped,
       ),
     );
   }
 }
 
-// ABA EXPLORAR (RF05) - BUSCA DADOS DA API E REMOVE DADOS LOCAIS
+// ABA EXPLORAR (RF05) - (MODIFICADA)
 class ExploreTab extends StatefulWidget {
   const ExploreTab({super.key});
   @override
@@ -317,23 +367,20 @@ class ExploreTab extends StatefulWidget {
 }
 
 class _ExploreTabState extends State<ExploreTab> {
-  List<dynamic> _courtsData = []; // Lista para guardar os dados das quadras da API
-  // TODO: Adicionar busca de partidas abertas da API
-  final List<Map<String, dynamic>> _openMatchesData = const [ // Mantém dados locais para partidas por enquanto
-    {'vagas': 2, 'esporte': 'Futsal', 'horario': '20:00', 'quadra': 'Quadra Central'},
-    {'vagas': 3, 'esporte': 'Vôlei', 'horario': '19:00', 'quadra': 'Arena Litoral'},
-    {'vagas': 1, 'esporte': 'Basquete', 'horario': '21:00', 'quadra': 'Ginásio Municipal'},
-  ];
+  List<dynamic> _courtsData = []; // Lista para quadras da API
+  List<dynamic> _openMatchesData = []; // 1. Lista (mutável) para partidas da API
+  
   bool _isLoadingCourts = true;
-  // bool _isLoadingMatches = true;
+  bool _isLoadingMatches = true; // 2. Estado de loading para partidas
 
   @override
   void initState() {
     super.initState();
     _fetchPublicCourts();
-    // TODO: Chamar _fetchOpenMatches();
+    _fetchOpenMatches(); // 3. Chamar a nova função
   }
 
+  // (Função _fetchPublicCourts sem alterações)
   Future<void> _fetchPublicCourts() async {
     if (!mounted) return;
     setState(() => _isLoadingCourts = true);
@@ -353,16 +400,77 @@ class _ExploreTabState extends State<ExploreTab> {
       print('Erro ao buscar quadras públicas: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text(e.toString().replaceAll('Exception: ', '')),
+              backgroundColor: Colors.red),
         );
         setState(() => _isLoadingCourts = false);
       }
     }
   }
 
+  // 4. Nova função para buscar Partidas Abertas (RF05)
+  Future<void> _fetchOpenMatches() async {
+    if (!mounted) return;
+    setState(() => _isLoadingMatches = true);
+    try {
+      final url = Uri.parse('${AppConfig.apiUrl}/matches/public');
+      final response = await http.get(url); // Endpoint público
+
+      if (response.statusCode == 200 && mounted) {
+        setState(() {
+          _openMatchesData = jsonDecode(response.body);
+          _isLoadingMatches = false;
+        });
+      } else {
+        throw Exception('Falha ao carregar partidas abertas: ${response.body}');
+      }
+    } catch (e) {
+      print('Erro ao buscar partidas abertas: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(e.toString().replaceAll('Exception: ', '')),
+              backgroundColor: Colors.red),
+        );
+        setState(() => _isLoadingMatches = false);
+      }
+    }
+  }
+
+  // 5. Nova função helper para formatar o Timestamp da partida
+  String _formatMatchTime(dynamic timestamp) {
+    DateTime? startTime;
+    if (timestamp is Map && timestamp['_seconds'] != null) {
+      startTime =
+          DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
+    } else if (timestamp is String) {
+      startTime = DateTime.tryParse(timestamp);
+    }
+
+    if (startTime != null) {
+      // Ex: "Hoje, 20:00", "Amanhã, 21:00", "Sáb, 10/11 - 22:00"
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      final dayOfMatch = DateTime(startTime.year, startTime.month, startTime.day);
+
+      if (dayOfMatch == today) {
+        return 'Hoje, ${DateFormat('HH:mm', 'pt_BR').format(startTime)}';
+      } else if (dayOfMatch == tomorrow) {
+        return 'Amanhã, ${DateFormat('HH:mm', 'pt_BR').format(startTime)}';
+      } else {
+        return DateFormat('E, dd/MM - HH:mm', 'pt_BR').format(startTime);
+      }
+    }
+    return 'N/A';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final userName = FirebaseAuth.instance.currentUser?.displayName?.split(' ').first ?? 'Atleta';
+    final userName =
+        FirebaseAuth.instance.currentUser?.displayName?.split(' ').first ??
+            'Atleta';
 
     return Scaffold(
       appBar: AppBar(
@@ -370,16 +478,25 @@ class _ExploreTabState extends State<ExploreTab> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Olá, $userName!', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal, color: AppTheme.hintColor)),
-            const Text('Encontre sua próxima partida', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
+            Text('Olá, $userName!',
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.normal,
+                    color: AppTheme.hintColor)),
+            const Text('Encontre sua próxima partida',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textColor)),
           ],
         ),
         toolbarHeight: 80,
       ),
       body: RefreshIndicator(
         onRefresh: () async {
+          // 6. Atualiza ambas as listas no Refresh
           await _fetchPublicCourts();
-          // TODO: await _fetchOpenMatches();
+          await _fetchOpenMatches();
         },
         child: ListView(
           padding: const EdgeInsets.all(16.0),
@@ -389,78 +506,107 @@ class _ExploreTabState extends State<ExploreTab> {
                 hintText: 'Buscar por quadra ou esporte...',
                 prefixIcon: Icon(Icons.search),
               ),
-                onChanged: (value) {
-                  print('Buscando por: $value');
-                },
+              onChanged: (value) {
+                print('Buscando por: $value');
+              },
             ),
             const SizedBox(height: 24),
 
-            // Seção de Partidas Abertas
+            // 7. Seção de Partidas Abertas (MODIFICADA)
             _buildSectionHeader('Partidas Abertas', () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const OpenMatchesPage()));
+              Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const OpenMatchesPage()));
             }),
             const SizedBox(height: 16),
             SizedBox(
               height: 180,
-              // TODO: Usar _isLoadingMatches e dados da API aqui
-              child: _openMatchesData.isEmpty
-                ? const Center(child: Text("Nenhuma partida aberta no momento.", style: TextStyle(color: AppTheme.hintColor)))
-                : ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _openMatchesData.length,
-                    itemBuilder: (context, index) {
-                      final match = _openMatchesData[index];
-                      // Usa o widget importado de shared/widgets
-                      return OpenMatchCard(
-                        vagas: match['vagas'] as int,
-                        esporte: match['esporte'] as String,
-                        horario: match['horario'] as String,
-                        quadra: match['quadra'] as String
-                      );
-                    }
-                  ),
+              // 8. Usa _isLoadingMatches e dados da API
+              child: _isLoadingMatches
+                  ? const Center(child: CircularProgressIndicator())
+                  : _openMatchesData.isEmpty
+                      ? const Center(
+                          child: Text("Nenhuma partida aberta no momento.",
+                              style: TextStyle(color: AppTheme.hintColor)))
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _openMatchesData.length,
+                          itemBuilder: (context, index) {
+                            final match = _openMatchesData[index];
+
+                            // 9. Extrai dados reais da API
+                            final vagas = match['vagasDisponiveis'] ?? 0;
+                            final esporte = match['esporte'] ?? 'N/D';
+                            final horario = _formatMatchTime(match['startTime']);
+                            final quadra = match['quadraNome'] ?? 'N/D';
+                            final matchId = match['id']; // ID da partida
+
+                            return OpenMatchCard(
+                              vagas: vagas as int,
+                              esporte: esporte as String,
+                              horario: horario,
+                              quadra: quadra as String,
+                              // 10. Adiciona onTap para navegar (RF09)
+                              onTap: () {
+                                Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (context) => MatchDetailsPage(matchId: matchId)
+                                ));
+                              },
+                            );
+                          }),
             ),
             const SizedBox(height: 24),
 
-            // Seção de Quadras (com dados da API)
+            // Seção de Quadras (Sem alterações)
             _buildSectionHeader('Quadras Perto de Você', () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AllCourtsPage()));
+              Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const AllCourtsPage()));
             }),
             const SizedBox(height: 16),
             SizedBox(
               height: 180,
               child: _isLoadingCourts
-                ? const Center(child: CircularProgressIndicator())
-                : _courtsData.isEmpty
-                    ? const Center(child: Text("Nenhuma quadra encontrada.", style: TextStyle(color: AppTheme.hintColor)))
-                    : ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _courtsData.length,
-                        itemBuilder: (context, index) {
-                          final court = _courtsData[index];
-                          final courtId = court['id'] ?? 'unknown_id_$index';
-                          final nome = court['nome'] ?? 'Quadra sem nome';
-                          final endereco = court['endereco'] ?? 'Endereço indisponível';
-                          final esporte = court['esporte'] ?? 'Esporte não definido';
-                          // Lógica placeholder para preço
-                          String pricePerHourStr = 'N/D';
-                          if (court['availability'] is Map) {
-                            final availabilityMap = court['availability'] as Map<String, dynamic>;
-                            // Tenta encontrar o preço do primeiro dia válido
-                            for (var dayData in availabilityMap.values) {
-                              if (dayData is Map && dayData['pricePerHour'] != null) {
-                                pricePerHourStr = dayData['pricePerHour']?.toStringAsFixed(2)?.replaceAll('.', ',') ?? 'N/D';
-                                break;
+                  ? const Center(child: CircularProgressIndicator())
+                  : _courtsData.isEmpty
+                      ? const Center(
+                          child: Text("Nenhuma quadra encontrada.",
+                              style: TextStyle(color: AppTheme.hintColor)))
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _courtsData.length,
+                          itemBuilder: (context, index) {
+                            final court = _courtsData[index];
+                            final courtId = court['id'] ?? 'unknown_id_$index';
+                            final nome = court['nome'] ?? 'Quadra sem nome';
+                            final endereco =
+                                court['endereco'] ?? 'Endereço indisponível';
+                            final esporte =
+                                court['esporte'] ?? 'Esporte não definido';
+                            
+                            String pricePerHourStr = 'N/D';
+                            if (court['availability'] is Map) {
+                              final availabilityMap =
+                                  court['availability'] as Map<String, dynamic>;
+                              for (var dayData in availabilityMap.values) {
+                                if (dayData is Map &&
+                                    dayData['pricePerHour'] != null) {
+                                  pricePerHourStr = dayData['pricePerHour']
+                                          ?.toStringAsFixed(2)
+                                          ?.replaceAll('.', ',') ??
+                                      'N/D';
+                                  break;
+                                }
                               }
                             }
-                          }
-                          final preco = 'R\$ $pricePerHourStr/h';
+                            final preco = 'R\$ $pricePerHourStr/h';
 
-                          return CourtCard(
-                            courtId: courtId, nome: nome, endereco: endereco, esporte: esporte, preco: preco,
-                          );
-                        }
-                      ),
+                            return CourtCard(
+                              courtId: courtId,
+                              nome: nome,
+                              endereco: endereco,
+                              esporte: esporte,
+                              preco: preco,
+                            );
+                          }),
             ),
           ],
         ),
@@ -472,7 +618,11 @@ class _ExploreTabState extends State<ExploreTab> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
+        Text(title,
+            style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textColor)),
         TextButton(onPressed: onViewAll, child: const Text('Ver todas')),
       ],
     );
@@ -480,16 +630,22 @@ class _ExploreTabState extends State<ExploreTab> {
 }
 
 // CARD PARA QUADRA
+// ... (Nenhuma alteração nesta classe, mantenha seu código do CourtCard como está)
 class CourtCard extends StatelessWidget {
   final String courtId, nome, endereco, esporte, preco;
 
-  const CourtCard({
-    super.key, required this.courtId, required this.nome, required this.endereco, required this.esporte, required this.preco
-  });
+  const CourtCard(
+      {super.key,
+      required this.courtId,
+      required this.nome,
+      required this.endereco,
+      required this.esporte,
+      required this.preco});
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = 'https://placehold.co/300x200/2E7D32/FFFFFF/png?text=${Uri.encodeComponent(nome)}&font=roboto';
+    final imageUrl =
+        'https://placehold.co/300x200/2E7D32/FFFFFF/png?text=${Uri.encodeComponent(nome)}&font=roboto';
 
     return Container(
       width: 250,
@@ -497,11 +653,10 @@ class CourtCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           Navigator.of(context).push(MaterialPageRoute(
-            builder: (context) => CourtDetailsPage(
-              courtId: courtId,
-              courtName: nome,
-            )
-          ));
+              builder: (context) => CourtDetailsPage(
+                    courtId: courtId,
+                    courtName: nome,
+                  )));
         },
         borderRadius: BorderRadius.circular(12),
         child: Ink(
@@ -519,12 +674,13 @@ class CourtCard extends StatelessWidget {
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, loadingProgress) {
                     if (loadingProgress == null) return child;
-                    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                    return const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2));
                   },
                   errorBuilder: (context, error, stackTrace) {
-                    // O 'print' é útil para debug, mas pode ser removido em produção
-                    // print('Erro ao carregar imagem (CourtCard): $error'); 
-                    return const Center(child: Icon(Icons.sports_soccer, color: Colors.grey, size: 40));
+                    return const Center(
+                        child: Icon(Icons.sports_soccer,
+                            color: Colors.grey, size: 40));
                   },
                 ),
               ),
@@ -534,7 +690,7 @@ class CourtCard extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [ Colors.transparent, Colors.black.withOpacity(0.8) ],
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
                     stops: const [0.5, 1.0],
                   ),
                 ),
@@ -547,20 +703,47 @@ class CourtCard extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.end,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(nome, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, shadows: [Shadow(blurRadius: 2, color: Colors.black54)])),
+                        Text(nome,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                shadows: [
+                                  Shadow(blurRadius: 2, color: Colors.black54)
+                                ])),
                         const SizedBox(height: 4),
-                        Text(endereco, style: const TextStyle(color: Colors.white70, shadows: [Shadow(blurRadius: 2, color: Colors.black54)]), overflow: TextOverflow.ellipsis),
+                        Text(endereco,
+                            style: const TextStyle(
+                                color: Colors.white70,
+                                shadows: [
+                                  Shadow(blurRadius: 2, color: Colors.black54)
+                                ]),
+                            overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
-                        Text(esporte, style: const TextStyle(color: Colors.white70, fontSize: 12, shadows: [Shadow(blurRadius: 2, color: Colors.black54)]), overflow: TextOverflow.ellipsis),
+                        Text(esporte,
+                            style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                shadows: [
+                                  Shadow(blurRadius: 2, color: Colors.black54)
+                                ]),
+                            overflow: TextOverflow.ellipsis),
                       ],
                     ),
                     Positioned(
                       top: 0,
                       right: 0,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.9), borderRadius: BorderRadius.circular(8)),
-                        child: Text(preco, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(8)),
+                        child: Text(preco,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12)),
                       ),
                     ),
                   ],

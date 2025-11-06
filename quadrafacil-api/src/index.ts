@@ -3,7 +3,8 @@ import cors from 'cors';
 import { db } from './config/firebase';
 import authRouter from './routes/auth.routes';
 import courtRouter from './routes/court.routes';
-import bookingRouter from './routes/booking.routes'; // 1. Importe o novo roteador
+import bookingRouter from './routes/booking.routes';
+import matchRouter from './routes/match.routes';
 
 const app = express();
 const PORT = 3000;
@@ -18,7 +19,8 @@ app.get('/', (req: Request, res: Response) => {
 // Nossas rotas
 app.use('/auth', authRouter);
 app.use('/courts', courtRouter);
-app.use('/bookings', bookingRouter); // 2. Adicione as rotas de reservas
+app.use('/bookings', bookingRouter);
+app.use('/matches', matchRouter);
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT} 🚀`);

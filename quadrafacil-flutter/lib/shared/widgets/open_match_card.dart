@@ -1,6 +1,6 @@
+// shared/widgets/open_match_card.dart
 import 'package:flutter/material.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
-import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart'; // Importa a página de detalhes
 
 // Widget reutilizável para exibir um card de Partida Aberta
 class OpenMatchCard extends StatelessWidget {
@@ -8,13 +8,15 @@ class OpenMatchCard extends StatelessWidget {
   final String esporte;
   final String horario;
   final String quadra;
+  final VoidCallback? onTap; // 1. Adiciona o parâmetro onTap
 
   const OpenMatchCard({
     super.key,
     required this.vagas,
     required this.esporte,
     required this.horario,
-    required this.quadra
+    required this.quadra,
+    this.onTap, // 2. Adiciona ao construtor
   });
 
   @override
@@ -23,12 +25,7 @@ class OpenMatchCard extends StatelessWidget {
       width: 250, // Largura fixa para scroll horizontal
       margin: const EdgeInsets.only(right: 16, bottom: 8),
       child: InkWell( // Permite o clique
-        onTap: () {
-          // Navega para a tela de detalhes da partida
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const MatchDetailsPage()),
-          );
-        },
+        onTap: onTap, // 3. Usa o parâmetro recebido
         borderRadius: BorderRadius.circular(12),
         child: Ink( // Necessário para o efeito visual do InkWell em containers com decoração
           padding: const EdgeInsets.all(12),

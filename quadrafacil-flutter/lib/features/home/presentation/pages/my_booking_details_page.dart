@@ -1,13 +1,13 @@
 // lib/features/home/presentation/pages/my_booking_details_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 1. Importar para o Input de números
 import 'package:intl/intl.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
-import 'package:http/http.dart' as http; // 1. Importar HTTP
-import 'package:firebase_auth/firebase_auth.dart'; // 2. Importar Firebase Auth
-import 'dart:convert'; // 3. Importar Dart Convert
-import 'package:quadrafacil/core/config.dart'; // 4. Importar AppConfig
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+import 'package:quadrafacil/core/config.dart';
 
-// 5. Convertido para StatefulWidget para gerenciar o estado de loading do cancelamento
 class MyBookingDetailsPage extends StatefulWidget {
   final Map<String, dynamic> booking;
 
@@ -18,11 +18,29 @@ class MyBookingDetailsPage extends StatefulWidget {
 }
 
 class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
-  bool _isCancelling = false; // Estado de loading
+  bool _isCancelling = false; // Estado de loading do cancelamento
+  bool _isOpeningMatch = false; // 2. Estado de loading para abrir partida
+  
+  // Variável para guardar o ID da partida aberta, se existir
+  String? _partidaAbertaId; 
+  final _vagasController = TextEditingController(text: '1'); // Controller para o input de vagas
 
-  // Função que exibe o diálogo de confirmação
+  @override
+  void initState() {
+    super.initState();
+    // 3. Verifica se a partida já foi aberta ao iniciar a tela
+    _partidaAbertaId = widget.booking['partidaAbertaId'];
+  }
+
+  @override
+  void dispose() {
+    _vagasController.dispose();
+    super.dispose();
+  }
+
+  // --- Lógica de Cancelamento (Sem alterações) ---
   Future<void> _showCancelConfirmationDialog(String bookingId) async {
-    if (_isCancelling) return; // Não faz nada se já estiver cancelando
+    if (_isCancelling) return;
 
     showDialog(
       context: context,
@@ -31,13 +49,13 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
         content: const Text('Tem certeza que deseja cancelar esta reserva? Esta ação não pode ser desfeita.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(), // Fecha o diálogo
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Voltar'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.of(dialogContext).pop(); // Fecha o diálogo
-              _performCancelBooking(bookingId); // Chama a função de API
+              Navigator.of(dialogContext).pop();
+              _performCancelBooking(bookingId);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Sim, Cancelar'),
@@ -47,7 +65,6 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
     );
   }
 
-  // Função que realmente chama a API de cancelamento
   Future<void> _performCancelBooking(String bookingId) async {
     if (!mounted) return;
     setState(() => _isCancelling = true);
@@ -60,17 +77,15 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
       final url = Uri.parse('${AppConfig.apiUrl}/bookings/$bookingId');
       final response = await http.delete(
         url,
-        headers: {'Authorization': 'Bearer $idToken'}, // Envia o token
+        headers: {'Authorization': 'Bearer $idToken'},
       );
 
       if (response.statusCode == 200 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reserva cancelada com sucesso!'), backgroundColor: Colors.green),
         );
-        // Volta para a lista de "Minhas Reservas"
         Navigator.of(context).pop();
       } else {
-        // Mostra o erro da API (ex: "Não é possível cancelar no mesmo dia")
         final error = jsonDecode(response.body);
         throw Exception(error['message'] ?? 'Falha ao cancelar reserva.');
       }
@@ -87,16 +102,114 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
     }
   }
 
+  // --- 4. Nova Lógica para ABRIR PARTIDA (RF08) ---
+  
+  // Exibe o diálogo para perguntar o número de vagas
+  Future<void> _showOpenMatchDialog(String bookingId) async {
+    if (_isOpeningMatch) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Abrir Partida'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Quantas vagas (jogadores) você quer disponibilizar para a comunidade?'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _vagasController,
+              decoration: const InputDecoration(
+                labelText: 'Número de vagas',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Voltar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final vagas = int.tryParse(_vagasController.text);
+              if (vagas != null && vagas > 0) {
+                Navigator.of(dialogContext).pop();
+                _performOpenMatch(bookingId, vagas); // Chama a API
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Por favor, insira um número de vagas válido.'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Abrir Partida'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Chama a API POST /matches/open
+  Future<void> _performOpenMatch(String bookingId, int vagasAbertas) async {
+    if (!mounted) return;
+    setState(() => _isOpeningMatch = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuário não autenticado.');
+      final idToken = await user.getIdToken(true);
+
+      final url = Uri.parse('${AppConfig.apiUrl}/matches/open');
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+        body: jsonEncode({
+          'bookingId': bookingId,
+          'vagasAbertas': vagasAbertas,
+        }),
+      );
+
+      if (response.statusCode == 201 && mounted) {
+        final responseData = jsonDecode(response.body);
+        setState(() {
+          // 5. Atualiza o estado local para esconder o botão
+          _partidaAbertaId = responseData['matchId']; 
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Partida aberta com sucesso!'), backgroundColor: Colors.green),
+        );
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Falha ao abrir partida.');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningMatch = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Acessa os dados do booking através do 'widget'
     final quadraNome = widget.booking['quadraNome'] ?? 'Quadra N/A';
     final endereco = widget.booking['quadraEndereco'] ?? 'Endereço não disponível';
     final preco = widget.booking['priceTotal'] != null
         ? 'R\$ ${widget.booking['priceTotal'].toStringAsFixed(2).replaceAll('.', ',')}'
         : 'Valor N/D';
     final status = widget.booking['status'] ?? 'N/A';
-    final bookingId = widget.booking['id']; // ID real da reserva
+    final bookingId = widget.booking['id'];
 
     final DateTime? startTime = widget.booking['parsedStartTime'] as DateTime?;
     final dataFormatada = startTime != null
@@ -106,8 +219,14 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
         ? DateFormat('HH:mm', 'pt_BR').format(startTime)
         : 'Hora N/D';
 
-    // Determina se o botão de cancelar deve estar visível
+    // 6. Define as condições de exibição dos botões
+    final bool isBookingConfirmed = status.toLowerCase() == 'confirmada';
+    final bool isBookingInFuture = startTime != null && startTime.isAfter(DateTime.now());
+    final bool isMatchAlreadyOpen = _partidaAbertaId != null;
     final bool canCancel = status.toLowerCase() != 'finalizada' && status.toLowerCase() != 'cancelada';
+    
+    // Condição final para o botão "Abrir Partida"
+    final bool canOpenMatch = isBookingConfirmed && isBookingInFuture && !isMatchAlreadyOpen;
 
     return Scaffold(
       appBar: AppBar(
@@ -147,15 +266,56 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
           ),
           const SizedBox(height: 32),
 
+          // --- 7. Novos Botões de Ação ---
+          
+          // Botão de Abrir Partida (RF08)
+          if (canOpenMatch)
+            ElevatedButton.icon(
+              onPressed: _isOpeningMatch 
+                ? null 
+                : () => _showOpenMatchDialog(bookingId!),
+              icon: _isOpeningMatch
+                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.group_add_outlined),
+              label: const Text('Procurar Jogadores (Abrir Partida)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white
+              ),
+            ),
+
+          // Feedback se a partida já estiver aberta
+          if (isMatchAlreadyOpen)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green)
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text('Esta partida está aberta!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          
+          // Separador visual
+          if (canOpenMatch || canCancel)
+            const SizedBox(height: 12),
+
           // Botão de Cancelar
           if (canCancel)
             OutlinedButton.icon(
-              onPressed: _isCancelling
-                  ? null // Desabilita o botão durante o loading
-                  : () => _showCancelConfirmationDialog(bookingId!), // Chama o diálogo
+              onPressed: _isCancelling || _isOpeningMatch // Desabilita se estiver abrindo partida tbm
+                  ? null
+                  : () => _showCancelConfirmationDialog(bookingId!),
               icon: const Icon(Icons.cancel_outlined),
               label: _isCancelling
-                  ? const SizedBox( // Mostra um spinner
+                  ? const SizedBox(
                       height: 16,
                       width: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
@@ -164,7 +324,7 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
               style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.red,
                   side: const BorderSide(color: Colors.red),
-                  disabledForegroundColor: Colors.red.withOpacity(0.5) // Cor quando desabilitado
+                  disabledForegroundColor: Colors.red.withOpacity(0.5)
                   ),
             ),
         ],
