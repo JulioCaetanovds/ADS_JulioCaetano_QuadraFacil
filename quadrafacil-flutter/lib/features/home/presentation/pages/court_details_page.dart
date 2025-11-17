@@ -1,12 +1,11 @@
+// lib/features/home/presentation/pages/court_details_page.dart
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
-// Import for initializeDateFormatting
 
 import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
-// Import from shared widgets
 import 'package:quadrafacil/shared/widgets/open_match_card.dart';
 import 'package:quadrafacil/features/home/presentation/pages/booking_page.dart';
 
@@ -20,8 +19,15 @@ class AvailabilityInfo {
   }
 }
 
+// 1. NOVO Modelo para guardar os detalhes públicos
+class CourtDetailsInfo {
+  final Map<String, dynamic> detailsData;
+  final String? ownerPixKey; // A chave PIX que buscamos
+
+  CourtDetailsInfo(this.detailsData, this.ownerPixKey);
+}
+
 class CourtDetailsPage extends StatefulWidget {
-  // Recebe o ID e nome da quadra
   final String courtId;
   final String courtName;
 
@@ -36,21 +42,24 @@ class CourtDetailsPage extends StatefulWidget {
 }
 
 class _CourtDetailsPageState extends State<CourtDetailsPage> {
+  // 2. Agora temos DOIS futures
   Future<AvailabilityInfo>? _availabilityFuture;
-  DateTime _selectedDate = DateTime.now(); // Data selecionada na AgendaTabContent
-  TimeOfDay? _selectedTimeSlot; // Horário selecionado na AgendaTabContent
+  Future<CourtDetailsInfo>? _detailsFuture; // Future para os detalhes e PIX
+
+  DateTime _selectedDate = DateTime.now();
+  TimeOfDay? _selectedTimeSlot;
+  String? _ownerPixKey; // 3. Variável local para guardar a chave PIX
 
   @override
   void initState() {
     super.initState();
-    // Garante que a formatação pt_BR está disponível
-    // Note: A inicialização principal já está no main.dart
-    // initializeDateFormatting('pt_BR', null);
+    // 4. Inicia as duas buscas
     _availabilityFuture = _fetchAvailability();
+    _detailsFuture = _fetchPublicDetails();
   }
 
+  // (Função _fetchAvailability sem alterações)
   Future<AvailabilityInfo> _fetchAvailability() async {
-    // Busca disponibilidade da API
     try {
       final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/availability');
       final response = await http.get(url);
@@ -60,14 +69,35 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
         throw Exception('Falha ao carregar disponibilidade: ${response.body}');
       }
     } catch (e) {
-      // Retorna o erro para o FutureBuilder tratar
       throw Exception('Erro de conexão ao buscar disponibilidade: ${e.toString()}');
     }
   }
 
-  // Callback chamado pela AgendaTabContent quando um horário é selecionado/desselecionado
+  // 5. NOVA Função para buscar Detalhes Públicos (incluindo PIX)
+  Future<CourtDetailsInfo> _fetchPublicDetails() async {
+    try {
+      final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/public-details');
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final pixKey = data['ownerPixKey'] as String?;
+        // 6. Guarda a chave PIX no estado da página
+        if (mounted) {
+          setState(() {
+            _ownerPixKey = pixKey;
+          });
+        }
+        return CourtDetailsInfo(data, pixKey);
+      } else {
+        throw Exception('Falha ao carregar detalhes da quadra: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Erro de conexão ao buscar detalhes: ${e.toString()}');
+    }
+  }
+
+
   void _onTimeSlotSelected(DateTime date, TimeOfDay? timeSlot) {
-    // Atualiza o estado desta página (pai) para guardar a seleção
     setState(() {
       _selectedDate = date;
       _selectedTimeSlot = timeSlot;
@@ -77,89 +107,98 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3, // Número de abas
+      length: 3, 
       child: Scaffold(
         body: NestedScrollView(
           headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-            // Constrói a barra superior que encolhe (SliverAppBar)
             return <Widget>[
               SliverAppBar(
-                expandedHeight: 220.0, // Altura quando expandida
-                floating: false, // Não flutua ao rolar para baixo
-                pinned: true, // Mantém a barra visível quando encolhida
-                stretch: true, // Efeito de esticar ao puxar além do limite
-                iconTheme: const IconThemeData(color: Colors.white), // Cor do ícone de voltar
-                title: Text(widget.courtName, style: const TextStyle(color: Colors.white)), // Usa o nome recebido
-                backgroundColor: AppTheme.primaryColor, // Cor de fundo quando encolhida
+                expandedHeight: 220.0,
+                floating: false,
+                pinned: true,
+                stretch: true,
+                iconTheme: const IconThemeData(color: Colors.white),
+                title: Text(widget.courtName, style: const TextStyle(color: Colors.white)),
+                backgroundColor: AppTheme.primaryColor,
                 flexibleSpace: FlexibleSpaceBar(
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Imagem de fundo
                       Image.asset(
-                        'assets/images/placeholder_quadra.png', // Placeholder local
+                        'assets/images/placeholder_quadra.png',
                         fit: BoxFit.cover,
                       ),
-                      // Gradiente para contraste
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.black.withOpacity(0.6), // Escuro no topo
+                              Colors.black.withOpacity(0.6),
                               Colors.transparent,
-                              Colors.black.withOpacity(0.8), // Escuro na base
+                              Colors.black.withOpacity(0.8),
                             ],
-                            stops: const [0.0, 0.4, 1.0], // Ajuste do gradiente
+                            stops: const [0.0, 0.4, 1.0],
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                // Abas na parte inferior da SliverAppBar
                 bottom: const TabBar(
                   tabs: [
                     Tab(text: 'SOBRE'),
                     Tab(text: 'AGENDA'),
                     Tab(text: 'PARTIDAS'),
                   ],
-                  labelColor: Colors.white, // Cor do texto da aba ativa
-                  unselectedLabelColor: Colors.white70, // Cor do texto das abas inativas
-                  indicatorColor: Colors.white, // Cor da linha indicadora
-                  indicatorWeight: 3.0, // Espessura da linha
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  indicatorColor: Colors.white,
+                  indicatorWeight: 3.0,
                 ),
               ),
             ];
           },
-          // Conteúdo principal que rola abaixo da SliverAppBar
           body: TabBarView(
             children: [
-              // --- Aba Sobre ---
-              ListView(
-                padding: const EdgeInsets.all(16),
-                children: const [
-                  Text('Descrição', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('Quadra poliesportiva coberta, ideal para futsal e vôlei. Vestiários e iluminação de LED inclusos.'), // Exemplo
-                  SizedBox(height: 24),
-                  Text('Regras de Utilização', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('- Obrigatório uso de tênis de futsal.\n- Proibido consumo de bebidas alcoólicas na quadra.'), // Exemplo
-                  SizedBox(height: 80), // Espaço extra para o FAB não cobrir o texto
-                ],
-              ),
-
-              // --- Aba Agenda (Usa FutureBuilder) ---
-              FutureBuilder<AvailabilityInfo>(
-                future: _availabilityFuture, // O Future que busca os dados
+              // --- Aba Sobre (Atualizada para usar FutureBuilder) ---
+              // 7. Usa o _detailsFuture para preencher a Aba 'Sobre'
+              FutureBuilder<CourtDetailsInfo>(
+                future: _detailsFuture,
                 builder: (context, snapshot) {
-                  // Enquanto espera os dados
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  // Se deu erro na busca
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Erro: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+                  }
+                  if (snapshot.hasData) {
+                    final details = snapshot.data!.detailsData;
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        const Text('Descrição', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(details['descricao'] ?? 'Nenhuma descrição informada.'),
+                        const SizedBox(height: 24),
+                        const Text('Regras de Utilização', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(details['regras'] ?? 'Nenhuma regra informada.'),
+                        const SizedBox(height: 80),
+                      ],
+                    );
+                  }
+                  return const Center(child: Text('Não foi possível carregar os detalhes.'));
+                }
+              ),
+
+              // --- Aba Agenda (Sem alterações na lógica) ---
+              FutureBuilder<AvailabilityInfo>(
+                future: _availabilityFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
                   else if (snapshot.hasError) {
                     return Center(
                         child: Padding(
@@ -169,15 +208,13 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
                           style: const TextStyle(color: Colors.red)),
                     ));
                   }
-                  // Se os dados chegaram com sucesso
                   else if (snapshot.hasData) {
                     return AgendaTabContent(
-                      availability: snapshot.data!, // Passa os dados para o widget filho
-                      onTimeSlotSelected: _onTimeSlotSelected, // Passa a função callback
-                      initialDate: _selectedDate, // Passa a data atual selecionada
+                      availability: snapshot.data!,
+                      onTimeSlotSelected: _onTimeSlotSelected,
+                      initialDate: _selectedDate,
                     );
                   }
-                  // Caso padrão (pouco provável de acontecer)
                   else {
                     return const Center(
                         child: Text('Nenhuma informação de agenda disponível.'));
@@ -185,31 +222,29 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
                 },
               ),
 
-              // --- Aba Partidas ---
+              // --- Aba Partidas (Sem alterações) ---
               ListView(
                 padding: const EdgeInsets.all(16),
                 children: const [
                   Text('Partidas abertas nesta quadra:',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   SizedBox(height: 16),
-                  // Usa o widget importado da pasta shared
                   OpenMatchCard(
                       vagas: 2,
                       esporte: 'Futsal',
                       horario: '20:00',
-                      quadra: 'Quadra Central'), // Exemplo
-                  // Adicionar mais partidas se houver...
-                   SizedBox(height: 80), // Espaço extra para o FAB
+                      quadra: 'Quadra Central'),
+                      SizedBox(height: 80), 
                 ],
               ),
             ],
           ),
         ),
-        // Botão flutuante para reservar
-        floatingActionButton: _selectedTimeSlot != null // Só aparece se um horário for selecionado
+        // 8. Botão flutuante ATUALIZADO
+        floatingActionButton: _selectedTimeSlot != null
             ? FloatingActionButton.extended(
                 onPressed: () {
-                  // Navega para a página de confirmação, passando os dados
+                  // 9. Passa a 'ownerPixKey' para a BookingPage
                   Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (context) => BookingPage(
@@ -217,26 +252,26 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
                               courtName: widget.courtName,
                               selectedDate: _selectedDate,
                               selectedTimeSlot: _selectedTimeSlot!,
+                              ownerPixKey: _ownerPixKey, // <-- PASSA A CHAVE PIX
                             )),
                   );
                 },
-                // Exibe a hora selecionada no botão
                 label: Text(
                     'Reservar ${DateFormat('HH:mm').format(DateTime(0, 1, 1, _selectedTimeSlot!.hour, _selectedTimeSlot!.minute))}'),
                 icon: const Icon(Icons.calendar_month_outlined),
-                // Estilo vem do tema global
               )
-            : null, // O botão fica oculto se nenhum horário estiver selecionado
+            : null,
       ),
     );
   }
 }
 
 // --- WIDGET PARA O CONTEÚDO DA ABA AGENDA ---
+// (Sem alterações, mantenha seu código da AgendaTabContent como está)
 class AgendaTabContent extends StatefulWidget {
   final AvailabilityInfo availability;
-  final Function(DateTime date, TimeOfDay? timeSlot) onTimeSlotSelected; // Callback para notificar o pai
-  final DateTime initialDate; // Recebe a data inicial do pai
+  final Function(DateTime date, TimeOfDay? timeSlot) onTimeSlotSelected;
+  final DateTime initialDate;
 
   const AgendaTabContent({
     super.key,
@@ -250,16 +285,15 @@ class AgendaTabContent extends StatefulWidget {
 }
 
 class _AgendaTabContentState extends State<AgendaTabContent> {
-  late DateTime _selectedDate; // Data atualmente exibida
-  TimeOfDay? _selectedTimeSlot; // Horário selecionado pelo usuário
+  late DateTime _selectedDate; 
+  TimeOfDay? _selectedTimeSlot; 
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = widget.initialDate; // Usa a data inicial vinda do pai
+    _selectedDate = widget.initialDate; 
   }
 
-  // Helper para obter a chave do dia da semana ('segunda', 'terca', etc.)
   String _getDayKey(DateTime date) {
     switch (date.weekday) {
       case 1: return 'segunda';
@@ -273,10 +307,8 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
     }
   }
 
-  // Gera a lista de slots de horário disponíveis para um dia
   List<TimeOfDay> _generateTimeSlots(String startTimeStr, String endTimeStr) {
     try {
-      // Converte string "HH:MM" para TimeOfDay
       TimeOfDay parseTime(String timeStr) {
         final parts = timeStr.split(':');
         return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
@@ -286,23 +318,18 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
       TimeOfDay endTime = parseTime(endTimeStr);
       List<TimeOfDay> slots = [];
 
-      // Cria um DateTime para facilitar a iteração de hora em hora
       DateTime current = DateTime(_selectedDate.year, _selectedDate.month,
           _selectedDate.day, startTime.hour, startTime.minute);
       DateTime end = DateTime(_selectedDate.year, _selectedDate.month,
           _selectedDate.day, endTime.hour, endTime.minute);
 
-      // Garante que só mostre horários futuros se for hoje
       DateTime now = DateTime.now();
       if (DateUtils.isSameDay(_selectedDate, now)) {
-        // Se a hora atual já passou do horário de início, ajusta o início
         if (now.isAfter(current)) {
-           // Ajusta para a próxima hora cheia após a hora atual
-           current = DateTime(now.year, now.month, now.day, now.hour + 1);
+          current = DateTime(now.year, now.month, now.day, now.hour + 1);
         }
       }
 
-      // Gera slots de 1 em 1 hora até o horário final
       while (current.isBefore(end)) {
         slots.add(TimeOfDay.fromDateTime(current));
         current = current.add(const Duration(hours: 1));
@@ -310,11 +337,10 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
       return slots;
     } catch (e) {
       print("Erro ao gerar slots de horário: $e");
-      return []; // Retorna lista vazia em caso de erro
+      return []; 
     }
   }
 
-  // Formata a data para exibição amigável ("Hoje", "Amanhã" ou "dd/MM (Dia)")
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -332,7 +358,6 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
 
   @override
   Widget build(BuildContext context) {
-    // Busca os dados de disponibilidade para o dia selecionado
     final dayKey = _getDayKey(_selectedDate);
     final dayAvailability = widget.availability.getDay(dayKey);
     final isClosed = dayAvailability == null;
@@ -346,24 +371,22 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
-        // --- Seletor de Data ---
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             IconButton(
               icon: const Icon(Icons.chevron_left),
-              // Desabilita voltar se a data for hoje
               onPressed: DateUtils.isSameDay(_selectedDate, DateTime.now())
                   ? null
                   : () {
                       setState(() {
-                        _selectedDate = _selectedDate.subtract(const Duration(days: 1));
-                        _selectedTimeSlot = null; // Reseta horário ao mudar data
+                        _selectedDate =
+                            _selectedDate.subtract(const Duration(days: 1));
+                        _selectedTimeSlot = null; 
                       });
-                      widget.onTimeSlotSelected(_selectedDate, _selectedTimeSlot); // Notifica o pai
+                      widget.onTimeSlotSelected(_selectedDate, _selectedTimeSlot);
                     },
             ),
-            // Exibe a data formatada
             Text(
               _formatDate(_selectedDate),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -371,34 +394,32 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
             IconButton(
               icon: const Icon(Icons.chevron_right),
               onPressed: () {
-                 setState(() {
-                   _selectedDate = _selectedDate.add(const Duration(days: 1));
-                   _selectedTimeSlot = null; // Reseta horário ao mudar data
-                 });
-                 widget.onTimeSlotSelected(_selectedDate, _selectedTimeSlot); // Notifica o pai
+                setState(() {
+                  _selectedDate = _selectedDate.add(const Duration(days: 1));
+                  _selectedTimeSlot = null; 
+                });
+                widget.onTimeSlotSelected(_selectedDate, _selectedTimeSlot);
               },
             ),
           ],
         ),
         const SizedBox(height: 24),
-
-        // --- Exibição dos Horários ou Mensagem ---
-        if (isClosed) // Se estiver fechado no dia selecionado
+        if (isClosed) 
           Center(
               child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 40.0),
             child: Text('Fechado neste dia.',
                 style: TextStyle(fontSize: 16, color: Colors.grey[600])),
           ))
-        else if (timeSlots.isEmpty) // Se estiver aberto, mas sem horários futuros
+        else if (timeSlots.isEmpty)
           Center(
               child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 40.0),
-            child: Text('Nenhum horário disponível para ${DateFormat('dd/MM').format(_selectedDate)}.', // Mais específico
+            child: Text('Nenhum horário disponível para ${DateFormat('dd/MM').format(_selectedDate)}.', 
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey[600])),
           ))
-        else // Se estiver aberto e com horários
+        else 
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -406,13 +427,11 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
                   'Horários disponíveis (R\$ ${pricePerHour.toStringAsFixed(2).replaceAll('.', ',')} / hora):',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
-              // Usa Wrap para organizar os botões de horário
               Wrap(
-                spacing: 8.0, // Espaçamento horizontal entre os botões
-                runSpacing: 8.0, // Espaçamento vertical entre as linhas de botões
+                spacing: 8.0, 
+                runSpacing: 8.0, 
                 children: timeSlots.map((time) {
                   final isSelected = _selectedTimeSlot == time;
-                  // Formata a hora para HH:MM
                   final formattedTime = DateFormat('HH:mm').format(DateTime(0,1,1,time.hour, time.minute));
 
                   return ChoiceChip(
@@ -421,9 +440,8 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
                     onSelected: (selected) {
                       final newTimeSlot = selected ? time : null;
                       setState(() {
-                        _selectedTimeSlot = newTimeSlot; // Atualiza o estado local
+                        _selectedTimeSlot = newTimeSlot; 
                       });
-                      // Notifica o widget pai sobre a seleção
                       widget.onTimeSlotSelected(_selectedDate, newTimeSlot);
                     },
                     selectedColor: AppTheme.primaryColor,
@@ -431,20 +449,18 @@ class _AgendaTabContentState extends State<AgendaTabContent> {
                         color: isSelected ? Colors.white : AppTheme.textColor,
                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
                     backgroundColor: Colors.grey[100],
-                    // Estilo da borda para indicar seleção
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                         side: BorderSide(
                             color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300)),
-                    showCheckmark: false, // Remove o checkmark padrão
+                    showCheckmark: false, 
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 80), // Espaço para o FAB não cobrir
+              const SizedBox(height: 80), 
             ],
           ),
       ],
     );
   }
 }
-

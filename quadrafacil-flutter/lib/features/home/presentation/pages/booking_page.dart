@@ -1,6 +1,7 @@
 // lib/features/home/presentation/pages/booking_page.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Import para copiar para clipboard
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
@@ -9,19 +10,19 @@ import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
 
 class BookingPage extends StatefulWidget {
-  // 1. Define os parâmetros que a página vai receber
   final String courtId;
   final String courtName;
   final DateTime selectedDate;
   final TimeOfDay selectedTimeSlot;
+  final String? ownerPixKey; // 1. Recebe a chave PIX
 
-  // 2. Atualiza o construtor para receber e exigir os parâmetros
   const BookingPage({
     super.key,
     required this.courtId,
     required this.courtName,
     required this.selectedDate,
     required this.selectedTimeSlot,
+    this.ownerPixKey, // 2. Adiciona ao construtor
   });
 
   @override
@@ -30,23 +31,24 @@ class BookingPage extends StatefulWidget {
 
 class _BookingPageState extends State<BookingPage> {
   bool _isLoading = false;
-  double? _price; // Para guardar o preço buscado da disponibilidade
+  double? _price; 
 
   @override
   void initState() {
     super.initState();
-    _fetchPrice(); // Busca o preço ao iniciar a tela
+    // 3. Removemos o _fetchPrice(), pois já temos o preço na CourtDetailsPage
+    //    Mas deixamos a função caso queira reutilizar
+    _fetchPrice(); 
   }
 
-  // Busca o preço na API de disponibilidade
   Future<void> _fetchPrice() async {
-    setState(() => _isLoading = true); // Reutiliza o loading
+    setState(() => _isLoading = true);
     try {
       final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/availability');
       final response = await http.get(url);
       if (response.statusCode == 200 && mounted) {
         final availabilityData = jsonDecode(response.body);
-        final dayKey = _getDayKey(widget.selectedDate); // Usa a mesma função helper
+        final dayKey = _getDayKey(widget.selectedDate); 
         final dayAvailability = availabilityData[dayKey];
         if (dayAvailability != null) {
           setState(() {
@@ -67,7 +69,6 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-  // Função helper para chave do dia (pode ser movida para utils)
   String _getDayKey(DateTime date) {
     switch (date.weekday) {
       case 1: return 'segunda';
@@ -90,8 +91,6 @@ class _BookingPageState extends State<BookingPage> {
       if (user == null) throw Exception('Usuário não autenticado.');
       final idToken = await user.getIdToken(true);
 
-      // ---- CORREÇÃO DO FUSO HORÁRIO ----
-      // 1. Cria o DateTime local "naive" (como era antes)
       final localStartTime = DateTime(
         widget.selectedDate.year,
         widget.selectedDate.month,
@@ -100,10 +99,8 @@ class _BookingPageState extends State<BookingPage> {
         widget.selectedTimeSlot.minute,
       );
       
-      // 2. Converte o DateTime local para UTC
       final startTimeUtc = localStartTime.toUtc();
       final endTimeUtc = startTimeUtc.add(const Duration(hours: 1)); 
-      // ------------------------------------
 
       final url = Uri.parse('${AppConfig.apiUrl}/bookings');
       final response = await http.post(
@@ -114,17 +111,16 @@ class _BookingPageState extends State<BookingPage> {
         },
         body: jsonEncode({
           'courtId': widget.courtId,
-          // 3. Envia a string ISO 8601 em UTC (ex: "....Z")
           'startTime': startTimeUtc.toIso8601String(),
           'endTime': endTimeUtc.toIso8601String(),
-          // Poderíamos enviar o preço aqui também se a API precisar
-          'precoTotal': _price 
+          'priceTotal': _price 
         }),
       );
 
         if (response.statusCode == 201 && mounted) {
+        // 4. Texto do SnackBar atualizado
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reserva solicitada! Aguardando pagamento.'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Reserva solicitada! Pague o PIX e aguarde a confirmação do dono.'), backgroundColor: Colors.green),
         );
         int count = 0;
         Navigator.of(context).popUntil((_) => count++ >= 2);
@@ -149,9 +145,12 @@ class _BookingPageState extends State<BookingPage> {
   @override
   Widget build(BuildContext context) {
     final formattedDate = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR').format(widget.selectedDate);
-    final formattedStartTime = widget.selectedTimeSlot.format(context); // Usa formatação local
+    final formattedStartTime = widget.selectedTimeSlot.format(context);
     final formattedEndTime = TimeOfDay(hour: widget.selectedTimeSlot.hour + 1, minute: widget.selectedTimeSlot.minute).format(context);
     final priceString = _price == null ? 'Buscando...' : 'R\$ ${_price!.toStringAsFixed(2).replaceAll('.', ',')}';
+    
+    // 5. Verifica se a chave PIX existe
+    final bool hasPixKey = widget.ownerPixKey != null && widget.ownerPixKey!.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -162,10 +161,65 @@ class _BookingPageState extends State<BookingPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Resumo da sua Reserva:', style: Theme.of(context).textTheme.titleLarge), // Estilo atualizado
-            const SizedBox(height: 24),
+            // 6. NOVO CARD DE INSTRUÇÕES DE PAGAMENTO (RF10)
+            if (hasPixKey) ...[
+              Card(
+                color: AppTheme.primaryColor.withOpacity(0.05),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppTheme.primaryColor)
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Instruções de Pagamento', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                      const SizedBox(height: 12),
+                      const Text('Para confirmar sua reserva, faça um PIX para a chave abaixo e clique em "Solicitar Confirmação".', style: TextStyle(height: 1.4)),
+                      const SizedBox(height: 16),
+                      Text('Chave PIX do Dono:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700])),
+                      const SizedBox(height: 4),
+                      // Campo da Chave PIX com botão de copiar
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                widget.ownerPixKey!, 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, size: 20),
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: widget.ownerPixKey!));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Chave PIX copiada!')),
+                                );
+                              },
+                            )
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
+            Text('Resumo da sua Reserva:', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16), // Diminuído
             Card(
-              elevation: 2, // Sombra suave
+              elevation: 2, 
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -187,7 +241,8 @@ class _BookingPageState extends State<BookingPage> {
               onPressed: _isLoading ? null : _confirmBooking,
               child: _isLoading
                 ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('CONFIRMAR E IR PARA PAGAMENTO'),
+                // 7. Texto do botão atualizado
+                : const Text('SOLICITAR CONFIRMAÇÃO'),
             ),
           ],
         ),
@@ -196,7 +251,7 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   Widget _buildInfoRow(IconData icon, String title, String value) {
-    return Padding( // Adiciona padding para melhor espaçamento
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         children: [
