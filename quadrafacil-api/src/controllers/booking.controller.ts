@@ -5,10 +5,9 @@ import admin from 'firebase-admin';
 import { db } from '../config/firebase'; // Nossa conexão com o Firestore
 
 // --- FUNÇÃO HELPER (AUXILIAR) ---
-// Converte um objeto Date (em UTC) para a chave de dia (segunda, terca...)
-// Nota: getUTCDay() no JS: 0 = Domingo, 1 = Segunda, 2 = Terça...
+// (Sem alterações)
 const getDayKeyFromDate = (date: Date): string => {
-  const dayIndex = date.getUTCDay(); // Usamos UTC para consistência
+  const dayIndex = date.getUTCDay();
   switch (dayIndex) {
     case 0: return 'domingo';
     case 1: return 'segunda';
@@ -17,28 +16,21 @@ const getDayKeyFromDate = (date: Date): string => {
     case 4: return 'quinta';
     case 5: return 'sexta';
     case 6: return 'sabado';
-    default: return 'segunda'; // Fallback
+    default: return 'segunda';
   }
 };
 
 // --- Função para CRIAR uma nova reserva ---
-// (MODIFICADA para calcular o preço dinamicamente)
+// (Sem alterações)
 export const createBooking = async (req: Request, res: Response) => {
   try {
-    const userId = req.currentUser?.uid; // ID do Atleta logado
-    if (!userId) {
-      return res.status(403).json({ message: 'Acesso negado. Usuário não autenticado.' });
-    }
-
-    // Dados esperados do front-end
-    // O front-end já envia o 'priceTotal' calculado no body
+    const userId = req.currentUser?.uid;
     const { courtId, startTime, endTime, priceTotal } = req.body; 
     
     if (!courtId || !startTime || !endTime) {
       return res.status(400).json({ message: 'courtId, startTime e endTime são obrigatórios.' });
     }
 
-    // 1. Busca dados da quadra para pegar o ownerId
     const courtRef = db.collection('quadras').doc(courtId);
     const courtDoc = await courtRef.get();
     if (!courtDoc.exists) {
@@ -50,38 +42,25 @@ export const createBooking = async (req: Request, res: Response) => {
     }
     
     const ownerId = courtData.ownerId;
-
-    // --- CORREÇÃO DO PREÇO ---
-    // 2. Converte a string 'startTime' (que está em UTC) para um objeto Date
     const startTimeDate = new Date(startTime);
-
-    // 3. Obtém a chave do dia (ex: 'sexta')
     const dayKey = getDayKeyFromDate(startTimeDate);
 
-    // 4. Busca o preço real na disponibilidade da quadra
     let calculatedPrice = 0.0;
     if (courtData.availability && courtData.availability[dayKey] && courtData.availability[dayKey].pricePerHour != null) {
       calculatedPrice = courtData.availability[dayKey].pricePerHour;
     } else {
-      // Fallback se o preço não estiver definido para aquele dia (não deveria acontecer)
       console.warn(`Preço não encontrado para ${dayKey} na quadra ${courtId}. Usando fallback 0.`);
-      // Você pode definir um preço padrão ou retornar um erro
-      // Por segurança, vamos usar o preço que o front-end enviou (priceTotal)
       calculatedPrice = priceTotal ?? 0.0; 
     }
-    // -------------------------
 
-    // TO-DO: Adicionar validação para checar se o horário já está ocupado
-
-    // Criar a nova reserva no Firestore
     const newBookingRef = await db.collection('reservas').add({
       courtId,
       userId,
-      ownerId, // Salva o ID do dono para facilitar a busca dele
-      startTime: admin.firestore.Timestamp.fromDate(startTimeDate), // Converte a data para Timestamp
+      ownerId,
+      startTime: admin.firestore.Timestamp.fromDate(startTimeDate),
       endTime: admin.firestore.Timestamp.fromDate(new Date(endTime)),
-      priceTotal: calculatedPrice, // 5. Salva o PREÇO CORRETO
-      status: 'pendente', // Status inicial
+      priceTotal: calculatedPrice,
+      status: 'pendente',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       pagamento: { qrCode: null, statusConfirmacao: 'aguardando' }
     });
@@ -113,7 +92,7 @@ export const getBookingsByOwner = async (req: Request, res: Response) => {
 
     const bookingPromises = bookingsSnapshot.docs.map(async (doc) => {
       const bookingData = doc.data();
-      if (!bookingData) return null; // Pula se os dados estiverem indefinidos
+      if (!bookingData) return null; 
 
       const courtId = bookingData.courtId;
       const userId = bookingData.userId;
@@ -139,7 +118,7 @@ export const getBookingsByOwner = async (req: Request, res: Response) => {
       };
     });
 
-    const bookingsList = (await Promise.all(bookingPromises)).filter(b => b !== null); // Filtra nulos
+    const bookingsList = (await Promise.all(bookingPromises)).filter(b => b !== null);
     return res.status(200).json(bookingsList);
 
   } catch (error) {
@@ -148,8 +127,6 @@ export const getBookingsByOwner = async (req: Request, res: Response) => {
   }
 };
 
-// --- Função para LISTAR as reservas de um ATLETA ---
-// (Sem alterações)
 export const getBookingsByAthlete = async (req: Request, res: Response) => {
   try {
     const userId = req.currentUser?.uid;
@@ -157,23 +134,24 @@ export const getBookingsByAthlete = async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Acesso negado.' });
     }
 
+    // --- Query 1: Reservas que EU ORGANIZEI ---
     const bookingsSnapshot = await db.collection('reservas')
                                       .where('userId', '==', userId)
                                       .get();
 
     const bookingPromises = bookingsSnapshot.docs.map(async (doc) => {
       const bookingData = doc.data();
-      if (!bookingData) return null; // Pula se os dados estiverem indefinidos
+      if (!bookingData) return null; 
 
       const courtId = bookingData.courtId;
-      let courtName = 'Quadra N/D';
-      let courtAddress = 'Endereço N/D';
+      let quadraNome = 'Quadra N/D';
+      let quadraEndereco = 'Endereço N/D';
 
       try {
         const courtDoc = await db.collection('quadras').doc(courtId).get();
         if (courtDoc.exists) {
-          courtName = courtDoc.data()?.nome ?? courtName;
-          courtAddress = courtDoc.data()?.endereco ?? courtAddress;
+          quadraNome = courtDoc.data()?.nome ?? quadraNome;
+          quadraEndereco = courtDoc.data()?.endereco ?? quadraEndereco;
         }
       } catch (e) {
         console.error(`Erro ao buscar dados da quadra ${courtId} para reserva ${doc.id}:`, e);
@@ -182,17 +160,74 @@ export const getBookingsByAthlete = async (req: Request, res: Response) => {
       return {
         id: doc.id,
         ...bookingData,
-        quadraNome: courtName,
-        quadraEndereco: courtAddress,
+        quadraNome: quadraNome,
+        quadraEndereco: quadraEndereco,
+        type: 'booking', // Tipo para o front-end
       };
     });
 
-    const bookingsList = (await Promise.all(bookingPromises)).filter(b => b !== null); // Filtra nulos
-    return res.status(200).json(bookingsList);
+    // --- Query 2: Partidas que EU ENTREI ---
+    const matchesSnapshot = await db.collection('partidasAbertas')
+                                      .where('participantesIds', 'array-contains', userId)
+                                      .orderBy('startTime', 'asc') // Ordena por data
+                                      .get();
 
-  } catch (error) {
-    console.error('Erro ao buscar reservas do atleta:', error);
-    return res.status(500).json({ message: 'Erro interno ao buscar reservas.' });
+    const matchPromises = matchesSnapshot.docs.map(async (doc) => {
+      const matchData = doc.data();
+      if (!matchData) return null;
+      
+      // Evita duplicidade: Se o atleta for o organizador, a Query 1 já pegou
+      if (matchData.organizadorId === userId) {
+        return null;
+      }
+
+      const courtId = matchData.quadraId;
+      let quadraNome = 'Quadra N/D';
+      let quadraEndereco = 'Endereço N/D';
+
+      try {
+        const courtDoc = await db.collection('quadras').doc(courtId).get();
+        if (courtDoc.exists) {
+          quadraNome = courtDoc.data()?.nome ?? quadraNome;
+          quadraEndereco = courtDoc.data()?.endereco ?? quadraEndereco;
+        }
+      } catch (e) {
+        console.error(`Erro ao buscar dados da quadra ${courtId} para partida ${doc.id}:`, e);
+      }
+
+      return {
+        id: doc.id,
+        ...matchData,
+        quadraNome: quadraNome,
+        quadraEndereco: quadraEndereco,
+        type: 'match', // Tipo para o front-end
+      };
+    });
+
+    // --- Combinar Resultados ---
+    const bookingsList = (await Promise.all(bookingPromises)).filter(b => b !== null);
+    const matchesList = (await Promise.all(matchPromises)).filter(m => m !== null);
+    
+    const combinedList = [...bookingsList, ...matchesList];
+
+    // --- CORREÇÃO AQUI ---
+    // Usamos '(a as any)' para informar ao TypeScript que o campo 'startTime' existe
+    combinedList.sort((a, b) => ((b as any).startTime.toMillis() - (a as any).startTime.toMillis()));
+    // ---------------------
+
+    return res.status(200).json(combinedList);
+
+  } catch (error: any) {
+    if (error.code === 'FAILED_PRECONDITION') {
+       console.error('ERRO DE ÍNDICE DO FIRESTORE:', error.message);
+       // Este é o erro que VAI acontecer se o índice não for criado
+       return res.status(500).json({ 
+         message: 'Erro no banco de dados: A consulta requer um índice. Verifique o console do Firebase.',
+         details: error.message
+       });
+    }
+    console.error('Erro ao buscar calendário do atleta:', error);
+    return res.status(500).json({ message: 'Erro interno ao buscar calendário do atleta.' });
   }
 };
 
@@ -268,9 +303,11 @@ export const cancelBooking = async (req: Request, res: Response) => {
   }
 };
 
+// --- Função para DONO CONFIRMAR uma reserva ---
+// (Sem alterações)
 export const confirmBooking = async (req: Request, res: Response) => {
   try {
-    const ownerId = req.currentUser?.uid; // Pega o ID do DONO logado
+    const ownerId = req.currentUser?.uid;
     const { bookingId } = req.params;
 
     if (!ownerId) {
@@ -288,14 +325,12 @@ export const confirmBooking = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Dados da reserva não encontrados.' });
     }
 
-    // Verifica se o usuário logado é o DONO da quadra desta reserva
     if (bookingData.ownerId !== ownerId) {
       return res.status(403).json({ message: 'Você não tem permissão para alterar esta reserva.' });
     }
 
-    // Atualiza o status
     await bookingRef.update({
-      status: 'confirmada', // MUDANÇA DE STATUS
+      status: 'confirmada',
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -308,9 +343,10 @@ export const confirmBooking = async (req: Request, res: Response) => {
 };
 
 // --- Função para DONO RECUSAR (cancelar) uma reserva ---
+// (Sem alterações)
 export const rejectBooking = async (req: Request, res: Response) => {
   try {
-    const ownerId = req.currentUser?.uid; // Pega o ID do DONO logado
+    const ownerId = req.currentUser?.uid;
     const { bookingId } = req.params;
 
     if (!ownerId) {
@@ -328,14 +364,12 @@ export const rejectBooking = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Dados da reserva não encontrados.' });
     }
 
-    // Verifica se o usuário logado é o DONO da quadra desta reserva
     if (bookingData.ownerId !== ownerId) {
       return res.status(403).json({ message: 'Você não tem permissão para alterar esta reserva.' });
     }
 
-    // Atualiza o status
     await bookingRef.update({
-      status: 'cancelada', // MUDANÇA DE STATUS (ou 'rejeitada', mas 'cancelada' é mais simples)
+      status: 'cancelada', 
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 

@@ -19,7 +19,6 @@ import 'package:quadrafacil/features/profile/presentation/pages/security_page.da
 import 'package:quadrafacil/shared/widgets/open_match_card.dart';
 
 // ABA MINHAS RESERVAS (RF07)
-// ... (Nenhuma alteração nesta classe, mantenha seu código da MyBookingsTab como está)
 class MyBookingsTab extends StatefulWidget {
   const MyBookingsTab({super.key});
 
@@ -38,6 +37,7 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
     _fetchAthleteBookings();
   }
 
+  // Função _fetchAthleteBookings (Sem alterações)
   Future<void> _fetchAthleteBookings() async {
     if (!mounted) return;
     if (!_isLoading) {
@@ -69,7 +69,8 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
               startTime = DateTime.tryParse(booking['startTime']);
             }
 
-            booking['parsedStartTime'] = startTime;
+            // Adiciona o 'parsedStartTime' (que o _formatBookingListItemTime usa)
+            booking['parsedStartTime'] = startTime; 
 
             if (startTime != null && startTime.isAfter(now)) {
               upcoming.add(booking);
@@ -78,6 +79,7 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
             }
           }
 
+          // A API já ordena, mas o front-end separa em 'upcoming' e 'history'
           upcoming.sort((a, b) => (a['parsedStartTime'] ?? DateTime(0))
               .compareTo(b['parsedStartTime'] ?? DateTime(0)));
           history.sort((a, b) => (b['parsedStartTime'] ?? DateTime(0))
@@ -105,6 +107,7 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
     }
   }
 
+  // Função _formatBookingListItemTime (Sem alterações)
   String _formatBookingListItemTime(DateTime? dateTime) {
     if (dateTime != null) {
       return DateFormat('dd/MM/yy HH:mm', 'pt_BR').format(dateTime);
@@ -112,6 +115,7 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
     return 'Data inválida';
   }
 
+  // Função build (da MyBookingsTab) (Sem alterações)
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -147,6 +151,7 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
     );
   }
 
+  // Widget _buildBookingList (MODIFICADO)
   Widget _buildBookingList(List<dynamic> bookings, String emptyMessage) {
     return bookings.isEmpty
         ? Center(
@@ -169,28 +174,45 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
               padding: const EdgeInsets.all(16.0),
               itemCount: bookings.length,
               itemBuilder: (context, index) {
-                final booking = bookings[index];
+                // 'booking' aqui pode ser uma Reserva ou uma Partida
+                final item = bookings[index]; 
+                
+                // --- 1. LÓGICA DE NAVEGAÇÃO ATUALIZADA ---
+                final itemType = item['type'] ?? 'booking'; // Pega o tipo (default 'booking')
 
                 final quadraNome =
-                    booking['quadraNome'] ?? booking['courtId'] ?? 'Quadra N/A';
+                    item['quadraNome'] ?? item['courtId'] ?? 'Quadra N/A';
                 final horarioFormatado = _formatBookingListItemTime(
-                    booking['parsedStartTime'] as DateTime?);
-                final status = booking['status'] ?? 'N/A';
+                    item['parsedStartTime'] as DateTime?);
+                
+                // Status pode ser 'confirmada' (reserva) ou 'aberta' (partida)
+                final status = item['status'] ?? 'N/A'; 
+                
                 final dataParte = horarioFormatado.split(' ')[0];
                 final horaParte = horarioFormatado.split(' ').length > 1
                     ? horarioFormatado.split(' ')[1]
                     : '';
 
+                // O 'BookingListItem' é genérico o suficiente para ambos
                 return BookingListItem(
                   quadra: quadraNome,
                   data: dataParte,
                   horario: horaParte,
                   status: status,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (context) =>
-                            MyBookingDetailsPage(booking: booking)),
-                  ),
+                  // --- 2. AQUI ESTÁ A MUDANÇA ---
+                  onTap: () {
+                    if (itemType == 'match') {
+                      // Se for uma Partida, navega para MatchDetailsPage
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (context) => MatchDetailsPage(matchId: item['id'])
+                      ));
+                    } else {
+                      // Se for uma Reserva (ou tipo desconhecido), navega para MyBookingDetailsPage
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (context) => MyBookingDetailsPage(booking: item)
+                      ));
+                    }
+                  },
                 );
               },
             ),
@@ -198,8 +220,9 @@ class _MyBookingsTabState extends State<MyBookingsTab> {
   }
 }
 
+
 // WIDGET REUTILIZÁVEL PARA ITEM DE RESERVA
-// ... (Nenhuma alteração nesta classe, mantenha seu código do BookingListItem como está)
+// (Sem alterações, 'aberta' e 'fechada' cairão no 'default' grey)
 class BookingListItem extends StatelessWidget {
   final String quadra, data, horario, status;
   final VoidCallback? onTap;
@@ -248,7 +271,7 @@ class BookingListItem extends StatelessWidget {
 }
 
 // ABA PERFIL (RF02)
-// ... (Nenhuma alteração nesta classe, mantenha seu código da ProfileTab como está)
+// ... (Nenhuma alteração nesta classe)
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
 
@@ -323,7 +346,7 @@ class ProfileTab extends StatelessWidget {
 }
 
 // HOME PAGE PRINCIPAL DO ATLETA
-// ... (Nenhuma alteração nesta classe, mantenha seu código da AthleteHomePage como está)
+// ... (Nenhuma alteração nesta classe)
 class AthleteHomePage extends StatefulWidget {
   const AthleteHomePage({super.key});
   @override
@@ -359,7 +382,8 @@ class _AthleteHomePageState extends State<AthleteHomePage> {
   }
 }
 
-// ABA EXPLORAR (RF05) - (MODIFICADA)
+// ABA EXPLORAR (RF05)
+// ... (Nenhuma alteração nesta classe)
 class ExploreTab extends StatefulWidget {
   const ExploreTab({super.key});
   @override
@@ -367,20 +391,19 @@ class ExploreTab extends StatefulWidget {
 }
 
 class _ExploreTabState extends State<ExploreTab> {
-  List<dynamic> _courtsData = []; // Lista para quadras da API
-  List<dynamic> _openMatchesData = []; // 1. Lista (mutável) para partidas da API
+  List<dynamic> _courtsData = []; 
+  List<dynamic> _openMatchesData = []; 
   
   bool _isLoadingCourts = true;
-  bool _isLoadingMatches = true; // 2. Estado de loading para partidas
+  bool _isLoadingMatches = true; 
 
   @override
   void initState() {
     super.initState();
     _fetchPublicCourts();
-    _fetchOpenMatches(); // 3. Chamar a nova função
+    _fetchOpenMatches(); 
   }
 
-  // (Função _fetchPublicCourts sem alterações)
   Future<void> _fetchPublicCourts() async {
     if (!mounted) return;
     setState(() => _isLoadingCourts = true);
@@ -409,13 +432,12 @@ class _ExploreTabState extends State<ExploreTab> {
     }
   }
 
-  // 4. Nova função para buscar Partidas Abertas (RF05)
   Future<void> _fetchOpenMatches() async {
     if (!mounted) return;
     setState(() => _isLoadingMatches = true);
     try {
       final url = Uri.parse('${AppConfig.apiUrl}/matches/public');
-      final response = await http.get(url); // Endpoint público
+      final response = await http.get(url); 
 
       if (response.statusCode == 200 && mounted) {
         setState(() {
@@ -438,7 +460,6 @@ class _ExploreTabState extends State<ExploreTab> {
     }
   }
 
-  // 5. Nova função helper para formatar o Timestamp da partida
   String _formatMatchTime(dynamic timestamp) {
     DateTime? startTime;
     if (timestamp is Map && timestamp['_seconds'] != null) {
@@ -449,7 +470,6 @@ class _ExploreTabState extends State<ExploreTab> {
     }
 
     if (startTime != null) {
-      // Ex: "Hoje, 20:00", "Amanhã, 21:00", "Sáb, 10/11 - 22:00"
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = DateTime(now.year, now.month, now.day + 1);
@@ -494,7 +514,6 @@ class _ExploreTabState extends State<ExploreTab> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          // 6. Atualiza ambas as listas no Refresh
           await _fetchPublicCourts();
           await _fetchOpenMatches();
         },
@@ -512,7 +531,6 @@ class _ExploreTabState extends State<ExploreTab> {
             ),
             const SizedBox(height: 24),
 
-            // 7. Seção de Partidas Abertas (MODIFICADA)
             _buildSectionHeader('Partidas Abertas', () {
               Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => const OpenMatchesPage()));
@@ -520,7 +538,6 @@ class _ExploreTabState extends State<ExploreTab> {
             const SizedBox(height: 16),
             SizedBox(
               height: 180,
-              // 8. Usa _isLoadingMatches e dados da API
               child: _isLoadingMatches
                   ? const Center(child: CircularProgressIndicator())
                   : _openMatchesData.isEmpty
@@ -533,19 +550,17 @@ class _ExploreTabState extends State<ExploreTab> {
                           itemBuilder: (context, index) {
                             final match = _openMatchesData[index];
 
-                            // 9. Extrai dados reais da API
                             final vagas = match['vagasDisponiveis'] ?? 0;
                             final esporte = match['esporte'] ?? 'N/D';
                             final horario = _formatMatchTime(match['startTime']);
                             final quadra = match['quadraNome'] ?? 'N/D';
-                            final matchId = match['id']; // ID da partida
+                            final matchId = match['id']; 
 
                             return OpenMatchCard(
                               vagas: vagas as int,
                               esporte: esporte as String,
                               horario: horario,
                               quadra: quadra as String,
-                              // 10. Adiciona onTap para navegar (RF09)
                               onTap: () {
                                 Navigator.of(context).push(MaterialPageRoute(
                                   builder: (context) => MatchDetailsPage(matchId: matchId)
@@ -556,7 +571,6 @@ class _ExploreTabState extends State<ExploreTab> {
             ),
             const SizedBox(height: 24),
 
-            // Seção de Quadras (Sem alterações)
             _buildSectionHeader('Quadras Perto de Você', () {
               Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => const AllCourtsPage()));
@@ -630,7 +644,7 @@ class _ExploreTabState extends State<ExploreTab> {
 }
 
 // CARD PARA QUADRA
-// ... (Nenhuma alteração nesta classe, mantenha seu código do CourtCard como está)
+// ... (Nenhuma alteração nesta classe)
 class CourtCard extends StatelessWidget {
   final String courtId, nome, endereco, esporte, preco;
 
