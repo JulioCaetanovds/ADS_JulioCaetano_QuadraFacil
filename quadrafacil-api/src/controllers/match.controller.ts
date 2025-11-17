@@ -243,3 +243,54 @@ export const joinMatch = async (req: Request, res: Response) => {
     return res.status(400).json({ message: error.message || 'Erro interno ao entrar na partida.' });
   }
 };
+
+export const leaveMatch = async (req: Request, res: Response) => {
+  try {
+    const userId = req.currentUser?.uid; // ID do atleta que quer sair
+    const { matchId } = req.params;
+
+    if (!userId) {
+      return res.status(403).json({ message: 'Acesso negado.' });
+    }
+
+    const matchRef = db.collection('partidasAbertas').doc(matchId);
+
+    // Usa uma transação para garantir a consistência dos dados
+    await db.runTransaction(async (transaction) => {
+      const matchDoc = await transaction.get(matchRef);
+
+      if (!matchDoc.exists) {
+        throw new Error('Partida não encontrada.');
+      }
+
+      const matchData = matchDoc.data()!;
+
+      // --- Regras de Negócio ---
+      if (matchData.startTime.toDate() < new Date()) {
+        throw new Error('Esta partida já ocorreu.');
+      }
+      if (!matchData.participantesIds.includes(userId)) {
+        throw new Error('Você não está participando desta partida.');
+      }
+      if (matchData.organizadorId === userId) {
+        throw new Error('O organizador não pode sair da partida (apenas cancelá-la).');
+      }
+
+      // --- Atualização dos dados ---
+      const novoStatus = 'aberta'; // Se alguém sair, a partida reabre (mesmo que estivesse 'fechada')
+
+      transaction.update(matchRef, {
+        participantesIds: admin.firestore.FieldValue.arrayRemove(userId), // Remove o ID da lista
+        vagasDisponiveis: admin.firestore.FieldValue.increment(1), // Devolve 1 vaga
+        status: novoStatus, // Garante que a partida fique 'aberta'
+      });
+    });
+
+    return res.status(200).json({ message: 'Você saiu da partida com sucesso!' });
+
+  } catch (error: any) {
+    console.error('Erro ao sair da partida:', error);
+    // Retorna a mensagem de erro da regra de negócio
+    return res.status(400).json({ message: error.message || 'Erro interno ao sair da partida.' });
+  }
+};

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:quadrafacil/core/config.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class MatchDetailsPage extends StatefulWidget {
   final String matchId;
@@ -18,21 +19,31 @@ class MatchDetailsPage extends StatefulWidget {
 class _MatchDetailsPageState extends State<MatchDetailsPage> {
   bool _isLoading = true;
   bool _isJoining = false; 
+  bool _isLeaving = false; // 1. Novo estado de loading para "Sair"
   Map<String, dynamic>? _matchData;
   String? _errorMessage;
+
+  String? _currentUserId;
+  bool _isCurrentUserParticipant = false;
+  bool _isOrganizador = false;
 
   @override
   void initState() {
     super.initState();
+    _currentUserId = FirebaseAuth.instance.currentUser?.uid;
     _fetchMatchDetails();
   }
 
   Future<void> _fetchMatchDetails() async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    // Não seta _isLoading = true aqui para o refresh ser mais suave
+    // Apenas no initState
+    if (_matchData == null) {
+       setState(() {
+         _isLoading = true;
+         _errorMessage = null;
+       });
+    }
 
     try {
       final url = Uri.parse('${AppConfig.apiUrl}/matches/${widget.matchId}');
@@ -43,6 +54,7 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
           setState(() {
             _matchData = jsonDecode(response.body);
             _isLoading = false;
+            _checkUserStatus();
           });
         }
       } else {
@@ -58,18 +70,135 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     }
   }
   
+  void _checkUserStatus() {
+    if (_matchData == null || _currentUserId == null) return;
+
+    final organizadorId = _matchData!['organizadorId'];
+    final participantes = _matchData!['participantesData'] as List? ?? [];
+
+    setState(() {
+      _isOrganizador = (_currentUserId == organizadorId);
+      _isCurrentUserParticipant = participantes.any((p) => p['id'] == _currentUserId);
+    });
+  }
+
+
+  // Função _joinMatch (Entrar na Partida) - (Sem alterações)
   Future<void> _joinMatch() async {
-    if (_isJoining) return;
+    if (_isJoining || _currentUserId == null) return;
     setState(() => _isJoining = true);
     
-    await Future.delayed(const Duration(seconds: 1));
-    print('TODO: Chamar API POST /matches/${widget.matchId}/join');
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuário não autenticado.');
+      final idToken = await user.getIdToken(true);
 
-    if (mounted) {
-       ScaffoldMessenger.of(context).showSnackBar(
-         const SnackBar(content: Text('TODO: Implementar API para entrar na partida!'), backgroundColor: Colors.blue),
-       );
-       setState(() => _isJoining = false);
+      final url = Uri.parse('${AppConfig.apiUrl}/matches/${widget.matchId}/join');
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+      );
+
+      if (response.statusCode == 200 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Você entrou na partida!'), backgroundColor: Colors.green),
+        );
+        // Atualiza o estado local e busca os dados novos
+        setState(() {
+          _isCurrentUserParticipant = true;
+        });
+        _fetchMatchDetails(); // Re-busca os dados para atualizar a lista
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Falha ao entrar na partida.');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isJoining = false);
+      }
+    }
+  }
+
+  // --- 2. NOVAS FUNÇÕES PARA "SAIR DA PARTIDA" ---
+  
+  // Diálogo de confirmação
+  Future<void> _showLeaveConfirmationDialog() async {
+    if (_isLeaving) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sair da Partida?'),
+        content: const Text('Tem certeza que deseja sair desta partida? Sua vaga será disponibilizada para outros jogadores.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Voltar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _performLeaveMatch(); // Chama a API
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Sim, Sair'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Função que chama a API DELETE
+  Future<void> _performLeaveMatch() async {
+    if (_isLeaving || _currentUserId == null) return;
+    setState(() => _isLeaving = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuário não autenticado.');
+      final idToken = await user.getIdToken(true);
+
+      final url = Uri.parse('${AppConfig.apiUrl}/matches/${widget.matchId}/leave');
+      final response = await http.delete(
+        url,
+        headers: {
+          'Authorization': 'Bearer $idToken', // Envia o token
+        },
+      );
+
+      if (response.statusCode == 200 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Você saiu da partida.'), backgroundColor: Colors.blue),
+        );
+        // Atualiza o estado local e busca os dados novos
+        setState(() {
+          _isCurrentUserParticipant = false;
+        });
+        _fetchMatchDetails(); // Re-busca os dados para atualizar a lista
+      } else {
+        // Mostra o erro da API (ex: "O organizador não pode sair")
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Falha ao sair da partida.');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLeaving = false);
+      }
     }
   }
 
@@ -119,59 +248,92 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     final int totalParticipantes = participantes.length;
     final int vagasTotais = totalParticipantes + vagasDisponiveis;
     
-    // --- CORREÇÃO AQUI ---
-    // 1. Garante que precoTotal seja 'num' (pode ser int ou double)
     final num precoTotal = (match['priceTotal'] as num?) ?? 0; 
-    // 2. Garante que o fallback seja '0.0' para forçar 'precoPorPessoa' a ser 'double'
     final double precoPorPessoa = (precoTotal > 0 && vagasTotais > 0) ? (precoTotal / vagasTotais) : 0.0;
-    // ---------------------
 
     return Column(
       children: [
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16.0),
-            children: [
-              _buildInfoCard(match, precoPorPessoa),
-              const SizedBox(height: 24),
-
-              Text('Participantes ($totalParticipantes/$vagasTotais)',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              _buildParticipantsList(participantes, organizador['nome']),
-              const SizedBox(height: 24),
-
-              const Text('Localização',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.location_on_outlined,
-                    color: AppTheme.primaryColor),
-                title: Text(quadra['nome'] ?? 'Quadra N/A'),
-                subtitle: Text(quadra['endereco'] ?? 'Endereço N/A'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () { /* TODO: Abrir mapa com o endereço */ },
-              ),
-            ],
+          child: RefreshIndicator( // 3. Adiciona RefreshIndicator
+            onRefresh: _fetchMatchDetails,
+            child: ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                _buildInfoCard(match, precoPorPessoa),
+                const SizedBox(height: 24),
+    
+                Text('Participantes ($totalParticipantes/$vagasTotais)',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                _buildParticipantsList(participantes, organizador['nome']),
+                const SizedBox(height: 24),
+    
+                const Text('Localização',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.location_on_outlined,
+                      color: AppTheme.primaryColor),
+                  title: Text(quadra['nome'] ?? 'Quadra N/A'),
+                  subtitle: Text(quadra['endereco'] ?? 'Endereço N/A'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () { /* TODO: Abrir mapa com o endereço */ },
+                ),
+              ],
+            ),
           ),
         ),
         SafeArea(
           child: Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: ElevatedButton.icon(
-              onPressed: _isJoining ? null : _joinMatch, 
-              icon: _isJoining 
-                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.add_task_outlined),
-              label: const Text('SOLICITAR PARTICIPAÇÃO'),
-            ),
+            child: _buildActionButton(vagasDisponiveis),
           ),
         ),
       ],
     );
   }
+
+  // 4. Lógica do Botão ATUALIZADA
+  Widget _buildActionButton(int vagasDisponiveis) {
+    if (_isOrganizador) {
+      return ElevatedButton(
+        onPressed: null, 
+        style: ElevatedButton.styleFrom(disabledBackgroundColor: Colors.grey[300]),
+        child: const Text('VOCÊ É O ORGANIZADOR', style: TextStyle(color: Colors.black54)),
+      );
+    }
+
+    if (_isCurrentUserParticipant) {
+      return OutlinedButton.icon(
+        // 5. Conecta o botão de Sair
+        onPressed: _isLeaving ? null : _showLeaveConfirmationDialog, 
+        icon: _isLeaving
+          ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
+          : const Icon(Icons.remove_circle_outline),
+        label: const Text('SAIR DA PARTIDA'),
+        style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+      );
+    }
+    
+    if (vagasDisponiveis <= 0) {
+      return const ElevatedButton(
+        onPressed: null, 
+        child: Text('VAGAS ESGOTADAS'),
+      );
+    }
+
+    // Caso padrão: pode entrar
+    return ElevatedButton.icon(
+      onPressed: _isJoining ? null : _joinMatch, 
+      icon: _isJoining 
+        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+        : const Icon(Icons.add_task_outlined),
+      label: const Text('SOLICITAR PARTICIPAÇÃO'),
+    );
+  }
+
 
   Widget _buildInfoCard(Map<String, dynamic> match, double precoPorPessoa) {
      final String esporte = match['quadraData']?['esporte'] ?? 'N/D';
@@ -221,7 +383,7 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
         itemCount: participants.length,
         itemBuilder: (context, index) {
           final participant = participants[index];
-          final bool isOrganizador = participant['nome'] == organizadorNome;
+          final bool isOrganizador = participant['id'] == _matchData!['organizadorId'];
 
           return SizedBox(
             width: 70,

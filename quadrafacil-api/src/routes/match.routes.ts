@@ -1,10 +1,11 @@
 import { Router } from 'express';
-// 1. Importa a nova função 'joinMatch'
+// 1. Importa a nova função 'leaveMatch'
 import {
   openMatch,
   getPublicMatches,
   getMatchDetails,
-  joinMatch 
+  joinMatch,
+  leaveMatch 
 } from '../controllers/match.controller';
 import { isAuthenticated } from '../middleware/auth.middleware';
 
@@ -21,11 +22,12 @@ matchRouter.post('/open', isAuthenticated, openMatch);
 // GET /matches/:matchId : Busca os detalhes de UMA partida específica
 matchRouter.get('/:matchId', getMatchDetails);
 
-// --- NOVA ROTA (RF09) ---
-// POST /matches/:matchId/join : Atleta entra em uma partida (requer autenticação)
+// POST /matches/:matchId/join : Atleta entra em uma partida (RF09)
 matchRouter.post('/:matchId/join', isAuthenticated, joinMatch);
 
+// --- NOVA ROTA (RF09 - Sair) ---
+// DELETE /matches/:matchId/leave : Atleta sai de uma partida (requer autenticação)
+matchRouter.delete('/:matchId/leave', isAuthenticated, leaveMatch);
 
-// TODO: Adicionar rota para atleta 'sair' da partida (DELETE /matches/:matchId/leave)
 
 export default matchRouter;
