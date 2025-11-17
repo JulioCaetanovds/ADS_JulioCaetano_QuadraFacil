@@ -6,9 +6,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:quadrafacil/core/config.dart';
 
-// 1. Convertido para StatefulWidget
 class MatchDetailsPage extends StatefulWidget {
-  // 2. Recebe o ID da partida
   final String matchId;
   
   const MatchDetailsPage({super.key, required this.matchId});
@@ -19,7 +17,7 @@ class MatchDetailsPage extends StatefulWidget {
 
 class _MatchDetailsPageState extends State<MatchDetailsPage> {
   bool _isLoading = true;
-  bool _isJoining = false; // Loading do botão de participar
+  bool _isJoining = false; 
   Map<String, dynamic>? _matchData;
   String? _errorMessage;
 
@@ -29,7 +27,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     _fetchMatchDetails();
   }
 
-  // 3. Função para buscar os dados da API
   Future<void> _fetchMatchDetails() async {
     if (!mounted) return;
     setState(() {
@@ -61,16 +58,13 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     }
   }
   
-  // 4. TODO: Função para entrar na partida (RF09)
   Future<void> _joinMatch() async {
     if (_isJoining) return;
     setState(() => _isJoining = true);
     
-    // Simula uma chamada de API
     await Future.delayed(const Duration(seconds: 1));
     print('TODO: Chamar API POST /matches/${widget.matchId}/join');
 
-    // Por enquanto, apenas exibe um SnackBar
     if (mounted) {
        ScaffoldMessenger.of(context).showSnackBar(
          const SnackBar(content: Text('TODO: Implementar API para entrar na partida!'), backgroundColor: Colors.blue),
@@ -90,7 +84,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     );
   }
 
-  // 5. Lógica de construção do corpo (loading, erro, sucesso)
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -117,7 +110,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
       return const Center(child: Text('Partida não encontrada.'));
     }
 
-    // 6. Extrai os dados reais da API
     final match = _matchData!;
     final quadra = match['quadraData'] ?? {};
     final organizador = match['organizadorData'] ?? {};
@@ -125,11 +117,14 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     
     final int vagasDisponiveis = match['vagasDisponiveis'] ?? 0;
     final int totalParticipantes = participantes.length;
-    // O total de vagas é o número de participantes + vagas disponíveis
     final int vagasTotais = totalParticipantes + vagasDisponiveis;
     
-    final precoTotal = match['priceTotal'] ?? 0;
-    final precoPorPessoa = (precoTotal > 0 && vagasTotais > 0) ? (precoTotal / vagasTotais) : 0;
+    // --- CORREÇÃO AQUI ---
+    // 1. Garante que precoTotal seja 'num' (pode ser int ou double)
+    final num precoTotal = (match['priceTotal'] as num?) ?? 0; 
+    // 2. Garante que o fallback seja '0.0' para forçar 'precoPorPessoa' a ser 'double'
+    final double precoPorPessoa = (precoTotal > 0 && vagasTotais > 0) ? (precoTotal / vagasTotais) : 0.0;
+    // ---------------------
 
     return Column(
       children: [
@@ -137,18 +132,15 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
           child: ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
-              // Card de Informações
               _buildInfoCard(match, precoPorPessoa),
               const SizedBox(height: 24),
 
-              // Seção de Participantes
               Text('Participantes ($totalParticipantes/$vagasTotais)',
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               _buildParticipantsList(participantes, organizador['nome']),
               const SizedBox(height: 24),
 
-              // Seção de Localização
               const Text('Localização',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -164,13 +156,12 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
             ],
           ),
         ),
-        // Botão de Ação
         SafeArea(
           child: Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: ElevatedButton.icon(
-              onPressed: _isJoining ? null : _joinMatch, // 7. Chama a função
+              onPressed: _isJoining ? null : _joinMatch, 
               icon: _isJoining 
                 ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                 : const Icon(Icons.add_task_outlined),
@@ -182,7 +173,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     );
   }
 
-  // 8. Helper atualizado para dados reais
   Widget _buildInfoCard(Map<String, dynamic> match, double precoPorPessoa) {
      final String esporte = match['quadraData']?['esporte'] ?? 'N/D';
      final String data = _formatTimestamp(match['startTime'], 'dd/MM/yy (EEEE)');
@@ -219,7 +209,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     );
   }
 
-  // 9. Helper atualizado para dados reais
   Widget _buildParticipantsList(List<dynamic> participants, String organizadorNome) {
     if (participants.isEmpty) {
       return const Text('Ainda não há participantes.', style: TextStyle(color: AppTheme.hintColor));
@@ -232,7 +221,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
         itemCount: participants.length,
         itemBuilder: (context, index) {
           final participant = participants[index];
-          // TODO: Usar 'participant['fotoUrl']' quando a API buscar
           final bool isOrganizador = participant['nome'] == organizadorNome;
 
           return SizedBox(
@@ -261,7 +249,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     );
   }
 
-  // 10. Helper de formatação de data
   String _formatTimestamp(dynamic timestamp, String format) {
     DateTime? time;
     if (timestamp is Map && timestamp['_seconds'] != null) {

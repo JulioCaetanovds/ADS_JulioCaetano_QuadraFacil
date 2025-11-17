@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AppConfig {
   // Seu IP local - MANTENHA ATUALIZADO!
-  static const String _localIp = '192.168.10.196'; 
+  static const String _localIp = '192.168.0.5'; 
   
   // Porta da sua API
   static const String _port = '3000';

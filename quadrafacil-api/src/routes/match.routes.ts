@@ -1,6 +1,11 @@
 import { Router } from 'express';
-// 1. Importa a nova função
-import { openMatch, getPublicMatches, getMatchDetails } from '../controllers/match.controller';
+// 1. Importa a nova função 'joinMatch'
+import {
+  openMatch,
+  getPublicMatches,
+  getMatchDetails,
+  joinMatch 
+} from '../controllers/match.controller';
 import { isAuthenticated } from '../middleware/auth.middleware';
 
 const matchRouter = Router();
@@ -13,11 +18,14 @@ matchRouter.get('/public', getPublicMatches);
 // POST /matches/open : Transforma uma reserva em uma partida aberta (RF08)
 matchRouter.post('/open', isAuthenticated, openMatch);
 
-// --- NOVA ROTA ---
 // GET /matches/:matchId : Busca os detalhes de UMA partida específica
-matchRouter.get('/:matchId', getMatchDetails); // Não requer auth, é tela pública
+matchRouter.get('/:matchId', getMatchDetails);
 
-// TODO: Adicionar rota para atleta 'entrar' na partida (POST /matches/:matchId/join)
+// --- NOVA ROTA (RF09) ---
+// POST /matches/:matchId/join : Atleta entra em uma partida (requer autenticação)
+matchRouter.post('/:matchId/join', isAuthenticated, joinMatch);
+
+
 // TODO: Adicionar rota para atleta 'sair' da partida (DELETE /matches/:matchId/leave)
 
 export default matchRouter;
