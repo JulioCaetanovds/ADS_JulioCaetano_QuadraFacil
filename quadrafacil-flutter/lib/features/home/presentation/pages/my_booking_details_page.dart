@@ -1,12 +1,14 @@
 // lib/features/home/presentation/pages/my_booking_details_page.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // 1. Importar para o Input de números
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'package:quadrafacil/core/config.dart';
+// 1. Importa a tela de detalhes da partida
+import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart';
 
 class MyBookingDetailsPage extends StatefulWidget {
   final Map<String, dynamic> booking;
@@ -18,17 +20,16 @@ class MyBookingDetailsPage extends StatefulWidget {
 }
 
 class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
-  bool _isCancelling = false; // Estado de loading do cancelamento
-  bool _isOpeningMatch = false; // 2. Estado de loading para abrir partida
+  bool _isCancelling = false;
+  bool _isOpeningMatch = false;
   
-  // Variável para guardar o ID da partida aberta, se existir
   String? _partidaAbertaId; 
-  final _vagasController = TextEditingController(text: '1'); // Controller para o input de vagas
+  final _vagasController = TextEditingController(text: '1');
 
   @override
   void initState() {
     super.initState();
-    // 3. Verifica se a partida já foi aberta ao iniciar a tela
+    // Verifica se a partida já foi aberta
     _partidaAbertaId = widget.booking['partidaAbertaId'];
   }
 
@@ -38,7 +39,6 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
     super.dispose();
   }
 
-  // --- Lógica de Cancelamento (Sem alterações) ---
   Future<void> _showCancelConfirmationDialog(String bookingId) async {
     if (_isCancelling) return;
 
@@ -101,10 +101,7 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
       }
     }
   }
-
-  // --- 4. Nova Lógica para ABRIR PARTIDA (RF08) ---
   
-  // Exibe o diálogo para perguntar o número de vagas
   Future<void> _showOpenMatchDialog(String bookingId) async {
     if (_isOpeningMatch) return;
 
@@ -138,7 +135,7 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
               final vagas = int.tryParse(_vagasController.text);
               if (vagas != null && vagas > 0) {
                 Navigator.of(dialogContext).pop();
-                _performOpenMatch(bookingId, vagas); // Chama a API
+                _performOpenMatch(bookingId, vagas); 
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Por favor, insira um número de vagas válido.'), backgroundColor: Colors.red),
@@ -152,7 +149,6 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
     );
   }
 
-  // Chama a API POST /matches/open
   Future<void> _performOpenMatch(String bookingId, int vagasAbertas) async {
     if (!mounted) return;
     setState(() => _isOpeningMatch = true);
@@ -178,7 +174,6 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
       if (response.statusCode == 201 && mounted) {
         final responseData = jsonDecode(response.body);
         setState(() {
-          // 5. Atualiza o estado local para esconder o botão
           _partidaAbertaId = responseData['matchId']; 
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -219,13 +214,11 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
         ? DateFormat('HH:mm', 'pt_BR').format(startTime)
         : 'Hora N/D';
 
-    // 6. Define as condições de exibição dos botões
     final bool isBookingConfirmed = status.toLowerCase() == 'confirmada';
     final bool isBookingInFuture = startTime != null && startTime.isAfter(DateTime.now());
     final bool isMatchAlreadyOpen = _partidaAbertaId != null;
     final bool canCancel = status.toLowerCase() != 'finalizada' && status.toLowerCase() != 'cancelada';
     
-    // Condição final para o botão "Abrir Partida"
     final bool canOpenMatch = isBookingConfirmed && isBookingInFuture && !isMatchAlreadyOpen;
 
     return Scaffold(
@@ -266,9 +259,9 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
           ),
           const SizedBox(height: 32),
 
-          // --- 7. Novos Botões de Ação ---
+          // --- Lógica de Botões ATUALIZADA ---
           
-          // Botão de Abrir Partida (RF08)
+          // 1. Botão para ABRIR (Criar) Partida
           if (canOpenMatch)
             ElevatedButton.icon(
               onPressed: _isOpeningMatch 
@@ -284,33 +277,54 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
               ),
             ),
 
-          // Feedback se a partida já estiver aberta
+          // 2. Botão para GERENCIAR Partida (Se já foi aberta)
           if (isMatchAlreadyOpen)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green)
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('Esta partida está aberta!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                ],
-              ),
+            Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green)
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green),
+                      SizedBox(width: 8),
+                      Text('Esta partida está aberta!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // --- AQUI ESTÁ A CORREÇÃO PARA O ATLETA 1 ---
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                       // Navega para a MatchDetailsPage usando o ID da partida
+                       Navigator.of(context).push(MaterialPageRoute(
+                         builder: (context) => MatchDetailsPage(matchId: _partidaAbertaId!)
+                       ));
+                    },
+                    icon: const Icon(Icons.settings, color: AppTheme.primaryColor),
+                    label: const Text('GERENCIAR PARTIDA / VER SOLICITAÇÕES'),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppTheme.primaryColor),
+                      foregroundColor: AppTheme.primaryColor
+                    ),
+                  ),
+                ),
+              ],
             ),
           
-          // Separador visual
-          if (canOpenMatch || canCancel)
+          if (canOpenMatch || isMatchAlreadyOpen || canCancel)
             const SizedBox(height: 12),
 
-          // Botão de Cancelar
           if (canCancel)
             OutlinedButton.icon(
-              onPressed: _isCancelling || _isOpeningMatch // Desabilita se estiver abrindo partida tbm
+              onPressed: _isCancelling || _isOpeningMatch 
                   ? null
                   : () => _showCancelConfirmationDialog(bookingId!),
               icon: const Icon(Icons.cancel_outlined),
@@ -332,7 +346,6 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
     );
   }
 
-  // Helper (sem alteração)
   Widget _buildDetailRow({required IconData icon, required String title, required String value}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0),

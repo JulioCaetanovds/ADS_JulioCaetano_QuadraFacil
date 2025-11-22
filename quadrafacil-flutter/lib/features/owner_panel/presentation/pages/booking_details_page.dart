@@ -182,7 +182,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
                     side: const BorderSide(color: Colors.red)),
               ),
             ] else ... [
-              Text('Esta reserva não pode mais ser alterada.', 
+              const Text('Esta reserva não pode mais ser alterada.', 
                 style: TextStyle(color: AppTheme.hintColor),
                 textAlign: TextAlign.center,
               )

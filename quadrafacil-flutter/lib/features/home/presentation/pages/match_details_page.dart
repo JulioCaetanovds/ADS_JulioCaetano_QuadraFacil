@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:quadrafacil/core/config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:quadrafacil/features/chat/presentation/pages/chat_detail_page.dart'; 
+import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart';
 
 class MatchDetailsPage extends StatefulWidget {
   final String matchId;
@@ -19,12 +21,15 @@ class MatchDetailsPage extends StatefulWidget {
 class _MatchDetailsPageState extends State<MatchDetailsPage> {
   bool _isLoading = true;
   bool _isJoining = false; 
-  bool _isLeaving = false; // 1. Novo estado de loading para "Sair"
+  bool _isLeaving = false;
+  bool _isProcessingRequest = false; 
+
   Map<String, dynamic>? _matchData;
   String? _errorMessage;
 
   String? _currentUserId;
   bool _isCurrentUserParticipant = false;
+  bool _isCurrentUserPending = false;
   bool _isOrganizador = false;
 
   @override
@@ -36,8 +41,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
 
   Future<void> _fetchMatchDetails() async {
     if (!mounted) return;
-    // Não seta _isLoading = true aqui para o refresh ser mais suave
-    // Apenas no initState
     if (_matchData == null) {
        setState(() {
          _isLoading = true;
@@ -75,15 +78,62 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
 
     final organizadorId = _matchData!['organizadorId'];
     final participantes = _matchData!['participantesData'] as List? ?? [];
+    final pendentes = _matchData!['pendentesData'] as List? ?? []; 
 
-    setState(() {
-      _isOrganizador = (_currentUserId == organizadorId);
-      _isCurrentUserParticipant = participantes.any((p) => p['id'] == _currentUserId);
-    });
+    _isOrganizador = (_currentUserId == organizadorId);
+    _isCurrentUserParticipant = participantes.any((p) => p['id'] == _currentUserId);
+    _isCurrentUserPending = pendentes.any((p) => p['id'] == _currentUserId);
   }
 
 
-  // Função _joinMatch (Entrar na Partida) - (Sem alterações)
+  // --- Lógica do Organizador ACEITAR/RECUSAR ---
+  Future<void> _handleRequest(String userId, bool approve) async {
+    if (_isProcessingRequest) return;
+    setState(() => _isProcessingRequest = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuário não autenticado.');
+      final idToken = await user.getIdToken(true);
+
+      final action = approve ? 'approve' : 'reject';
+      final url = Uri.parse('${AppConfig.apiUrl}/matches/${widget.matchId}/$action');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+        body: jsonEncode({
+          'userIdTo${approve ? 'Approve' : 'Reject'}': userId
+        }),
+      );
+
+      if (response.statusCode == 200 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(approve ? 'Solicitação aprovada!' : 'Solicitação recusada.'), 
+            backgroundColor: approve ? Colors.green : Colors.orange
+          ),
+        );
+        _fetchMatchDetails(); 
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Falha ao processar solicitação.');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingRequest = false);
+    }
+  }
+
+  // --- Lógica para Entrar (Solicitar) ---
   Future<void> _joinMatch() async {
     if (_isJoining || _currentUserId == null) return;
     setState(() => _isJoining = true);
@@ -102,18 +152,14 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
         },
       );
 
-      if (response.statusCode == 200 && mounted) {
+      if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Você entrou na partida!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Solicitação enviada! Aguarde a aprovação.'), backgroundColor: Colors.green),
         );
-        // Atualiza o estado local e busca os dados novos
-        setState(() {
-          _isCurrentUserParticipant = true;
-        });
-        _fetchMatchDetails(); // Re-busca os dados para atualizar a lista
+        _fetchMatchDetails(); 
       } else {
         final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Falha ao entrar na partida.');
+        throw Exception(error['message'] ?? 'Falha ao solicitar entrada.');
       }
     } catch (e) {
       if (mounted) {
@@ -122,15 +168,11 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isJoining = false);
-      }
+      if (mounted) setState(() => _isJoining = false);
     }
   }
 
-  // --- 2. NOVAS FUNÇÕES PARA "SAIR DA PARTIDA" ---
-  
-  // Diálogo de confirmação
+  // --- Lógica para Sair ---
   Future<void> _showLeaveConfirmationDialog() async {
     if (_isLeaving) return;
 
@@ -138,7 +180,7 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Sair da Partida?'),
-        content: const Text('Tem certeza que deseja sair desta partida? Sua vaga será disponibilizada para outros jogadores.'),
+        content: const Text('Tem certeza que deseja sair?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -147,7 +189,7 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
-              _performLeaveMatch(); // Chama a API
+              _performLeaveMatch(); 
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Sim, Sair'),
@@ -157,7 +199,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     );
   }
 
-  // Função que chama a API DELETE
   Future<void> _performLeaveMatch() async {
     if (_isLeaving || _currentUserId == null) return;
     setState(() => _isLeaving = true);
@@ -170,22 +211,15 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
       final url = Uri.parse('${AppConfig.apiUrl}/matches/${widget.matchId}/leave');
       final response = await http.delete(
         url,
-        headers: {
-          'Authorization': 'Bearer $idToken', // Envia o token
-        },
+        headers: {'Authorization': 'Bearer $idToken'},
       );
 
       if (response.statusCode == 200 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Você saiu da partida.'), backgroundColor: Colors.blue),
         );
-        // Atualiza o estado local e busca os dados novos
-        setState(() {
-          _isCurrentUserParticipant = false;
-        });
-        _fetchMatchDetails(); // Re-busca os dados para atualizar a lista
+        _fetchMatchDetails(); 
       } else {
-        // Mostra o erro da API (ex: "O organizador não pode sair")
         final error = jsonDecode(response.body);
         throw Exception(error['message'] ?? 'Falha ao sair da partida.');
       }
@@ -196,11 +230,58 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLeaving = false);
-      }
+      if (mounted) setState(() => _isLeaving = false);
     }
   }
+
+  // --- Lógica do Chat (RF11) ---
+  Future<void> _handleMatchChat() async {
+    if (_isProcessingRequest) return;
+    setState(() => _isProcessingRequest = true);
+
+    try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) throw Exception('Usuário não autenticado.');
+        final idToken = await user.getIdToken(true);
+
+        final url = Uri.parse('${AppConfig.apiUrl}/chats/match/${widget.matchId}');
+        final response = await http.post(
+            url,
+            headers: {
+                'Authorization': 'Bearer $idToken',
+                'Content-Type': 'application/json',
+            },
+        );
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+            final responseData = jsonDecode(response.body);
+            final chatId = responseData['chatId'];
+            final chatTitle = _matchData!['quadraData']?['nome'] ?? 'Chat da Partida';
+
+            if (mounted) {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Chat pronto! Abrindo conversa...')),
+                );
+                // 2. NAVEGAÇÃO PARA A TELA DE CHAT
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => ChatDetailPage(chatId: chatId, title: chatTitle)
+                ));
+            }
+        } else {
+            final error = jsonDecode(response.body);
+            throw Exception(error['message'] ?? 'Falha ao iniciar o chat de grupo.');
+        }
+
+    } catch (e) {
+        if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+            );
+        }
+    } finally {
+        if (mounted) setState(() => _isProcessingRequest = false);
+    }
+}
 
 
   @override
@@ -243,6 +324,7 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     final quadra = match['quadraData'] ?? {};
     final organizador = match['organizadorData'] ?? {};
     final participantes = match['participantesData'] as List? ?? [];
+    final pendentes = match['pendentesData'] as List? ?? []; 
     
     final int vagasDisponiveis = match['vagasDisponiveis'] ?? 0;
     final int totalParticipantes = participantes.length;
@@ -251,23 +333,66 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     final num precoTotal = (match['priceTotal'] as num?) ?? 0; 
     final double precoPorPessoa = (precoTotal > 0 && vagasTotais > 0) ? (precoTotal / vagasTotais) : 0.0;
 
+    final bool canAccessChat = _isOrganizador || _isCurrentUserParticipant; 
+
     return Column(
       children: [
         Expanded(
-          child: RefreshIndicator( // 3. Adiciona RefreshIndicator
+          child: RefreshIndicator(
             onRefresh: _fetchMatchDetails,
             child: ListView(
               padding: const EdgeInsets.all(16.0),
               children: [
                 _buildInfoCard(match, precoPorPessoa),
                 const SizedBox(height: 24),
+
+                // --- SEÇÃO DE SOLICITAÇÕES PENDENTES (Corrigido para usar length) ---
+                if (_isOrganizador && pendentes.isNotEmpty) ...[
+                   Container(
+                     padding: const EdgeInsets.all(8),
+                     decoration: BoxDecoration(
+                       color: Colors.orange.withOpacity(0.1),
+                       borderRadius: BorderRadius.circular(8),
+                       border: Border.all(color: Colors.orange)
+                     ),
+                     child: Column(
+                       crossAxisAlignment: CrossAxisAlignment.start,
+                       children: [
+                         Row(
+                           children: [
+                             const Icon(Icons.notifications_active, color: Colors.orange),
+                             const SizedBox(width: 8),
+                             Text('Solicitações Pendentes (${pendentes.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange)),
+                           ],
+                         ),
+                         const SizedBox(height: 8),
+                         _buildRequestsList(pendentes),
+                       ],
+                     ),
+                   ),
+                   const SizedBox(height: 24),
+                ],
+                // ----------------------------------------
     
                 Text('Participantes ($totalParticipantes/$vagasTotais)',
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
                 _buildParticipantsList(participantes, organizador['nome']),
                 const SizedBox(height: 24),
-    
+                
+                // --- BOTÃO DE CHAT NO MEIO DO CONTEÚDO ---
+                 if (canAccessChat) ...[
+                    ElevatedButton.icon(
+                        onPressed: _isProcessingRequest ? null : _handleMatchChat,
+                        icon: _isProcessingRequest
+                            ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.chat_bubble_outline),
+                        label: const Text('CHAT DA PARTIDA'),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor),
+                    ),
+                    const SizedBox(height: 24),
+                 ],
+
                 const Text('Localização',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
@@ -278,7 +403,7 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
                   title: Text(quadra['nome'] ?? 'Quadra N/A'),
                   subtitle: Text(quadra['endereco'] ?? 'Endereço N/A'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () { /* TODO: Abrir mapa com o endereço */ },
+                  onTap: () { },
                 ),
               ],
             ),
@@ -295,7 +420,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     );
   }
 
-  // 4. Lógica do Botão ATUALIZADA
   Widget _buildActionButton(int vagasDisponiveis) {
     if (_isOrganizador) {
       return ElevatedButton(
@@ -307,13 +431,19 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
 
     if (_isCurrentUserParticipant) {
       return OutlinedButton.icon(
-        // 5. Conecta o botão de Sair
         onPressed: _isLeaving ? null : _showLeaveConfirmationDialog, 
         icon: _isLeaving
           ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
           : const Icon(Icons.remove_circle_outline),
         label: const Text('SAIR DA PARTIDA'),
         style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+      );
+    }
+    
+    if (_isCurrentUserPending) {
+       return const ElevatedButton(
+        onPressed: null, 
+        child: Text('SOLICITAÇÃO ENVIADA (AGUARDANDO APROVAÇÃO)'),
       );
     }
     
@@ -324,7 +454,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
       );
     }
 
-    // Caso padrão: pode entrar
     return ElevatedButton.icon(
       onPressed: _isJoining ? null : _joinMatch, 
       icon: _isJoining 
@@ -333,7 +462,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
       label: const Text('SOLICITAR PARTICIPAÇÃO'),
     );
   }
-
 
   Widget _buildInfoCard(Map<String, dynamic> match, double precoPorPessoa) {
      final String esporte = match['quadraData']?['esporte'] ?? 'N/D';
@@ -408,6 +536,46 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
           );
         },
       ),
+    );
+  }
+  
+  Widget _buildRequestsList(List<dynamic> pendentes) {
+    return ListView.builder(
+      shrinkWrap: true, 
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: pendentes.length,
+      itemBuilder: (context, index) {
+        final user = pendentes[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            leading: CircleAvatar(
+              backgroundColor: Colors.grey[300],
+              child: const Icon(Icons.person, color: Colors.grey),
+            ),
+            title: Text(user['nome']),
+            subtitle: const Text('Quer participar'),
+            trailing: _isProcessingRequest 
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.check_circle, color: Colors.green, size: 30),
+                  onPressed: () => _handleRequest(user['id'], true), // Aprovar
+                  tooltip: 'Aceitar',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.cancel, color: Colors.red, size: 30),
+                  onPressed: () => _handleRequest(user['id'], false), // Rejeitar
+                  tooltip: 'Recusar',
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

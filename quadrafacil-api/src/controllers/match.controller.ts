@@ -75,8 +75,9 @@ export const getPublicMatches = async (req: Request, res: Response) => {
   try {
     const now = admin.firestore.Timestamp.now();
 
+    // 1. Busca partidas que estão explicitamente 'aberta' e que ainda não aconteceram
     const matchesSnapshot = await db.collection('partidasAbertas')
-      .where('status', '==', 'aberta')
+      .where('status', '==', 'aberta') // <-- Garante que não apareçam partidas canceladas ou fechadas
       .where('startTime', '>', now)
       .orderBy('startTime', 'asc')
       .get();
@@ -85,6 +86,7 @@ export const getPublicMatches = async (req: Request, res: Response) => {
       return res.status(200).json([]);
     }
 
+    // 2. Mapeamento assíncrono para "enriquecer" os dados
     const matchesPromises = matchesSnapshot.docs.map(async (doc) => {
       const matchData = doc.data();
       const quadraId = matchData.quadraId;
@@ -104,6 +106,7 @@ export const getPublicMatches = async (req: Request, res: Response) => {
         console.error(`Erro ao buscar dados da quadra ${quadraId} para partida ${doc.id}:`, e);
       }
 
+      // 4. Retorna o objeto combinado
       return {
         id: doc.id,
         ...matchData,
@@ -142,15 +145,13 @@ export const getMatchDetails = async (req: Request, res: Response) => {
     const quadraId = matchData.quadraId;
     const organizadorId = matchData.organizadorId;
     const participantesIds: string[] = matchData.participantesIds || [];
+    const participantesPendentesIds: string[] = matchData.participantesPendentes || []; // [!code focus]
 
     let quadraData = {};
-    
-    let organizadorData: { nome: string; fotoUrl: string | null } = { 
-      nome: 'Organizador N/D', 
-      fotoUrl: null 
+    let organizadorData: { nome: string; fotoUrl: string | null } = {
+      nome: 'Organizador N/D',
+      fotoUrl: null
     };
-
-    let participantesData: any[] = [];
 
     try {
       const courtDoc = await db.collection('quadras').doc(quadraId).get();
@@ -167,19 +168,48 @@ export const getMatchDetails = async (req: Request, res: Response) => {
       };
     } catch (e) { console.error("Erro ao buscar organizador:", e); }
 
-    // TODO: Buscar o perfil de cada participante se necessário
-    participantesData = participantesIds.map(id => ({
-      id: id,
-      nome: id === organizadorId ? organizadorData.nome : 'Participante' 
-    }));
+    const fetchUsersData = async (ids: string[]) => {
+      return Promise.all(ids.map(async (id) => {
+        try {
+          if (id === organizadorId) {
+            return { id, ...organizadorData };
+          }
+          const userRecord = await admin.auth().getUser(id);
+          return {
+            id: id,
+            nome: userRecord.displayName ?? userRecord.email ?? 'Usuário',
+            fotoUrl: userRecord.photoURL ?? null
+          };
+        } catch (e) {
+          return { id: id, nome: 'Usuário Desconhecido', fotoUrl: null };
+        }
+      }));
+    };
 
-    return res.status(200).json({
+    const participantesData = await fetchUsersData(participantesIds);
+    const pendentesData = await fetchUsersData(participantesPendentesIds); // [!code focus]
+
+    // ----------------------------------------------------
+    // ** DEBUG 1: VERIFICAÇÃO DE DADOS CRÍTICOS **
+    // ----------------------------------------------------
+    console.log("--- DEBUG 1: API BACKEND START ---");
+    console.log("Organizador ID:", organizadorId);
+    console.log("Qtd. Participantes Confirmados:", participantesData.length);
+    console.log("Qtd. Solicitantes Pendentes:", pendentesData.length); // [!code focus]
+    console.log("Dados dos Pendentes:", pendentesData.map(p => p.nome)); // [!code focus]
+    console.log("--- DEBUG 1: API BACKEND END ---");
+    // ----------------------------------------------------
+
+    const responseData = {
       id: matchDoc.id,
       ...matchData,
       quadraData: quadraData,
       organizadorData: organizadorData,
       participantesData: participantesData,
-    });
+      pendentesData: pendentesData,
+    };
+
+    return res.status(200).json(responseData);
 
   } catch (error) {
     console.error('Erro ao buscar detalhes da partida:', error);
@@ -187,11 +217,12 @@ export const getMatchDetails = async (req: Request, res: Response) => {
   }
 };
 
-// --- NOVA FUNÇÃO (RF09) ---
+// --- UPDATED FUNCTION (RF09) ---
 // POST /matches/:matchId/join
+// Now adds to 'participantesPendentes' instead of 'participantesIds'
 export const joinMatch = async (req: Request, res: Response) => {
   try {
-    const userId = req.currentUser?.uid; // ID do atleta que quer entrar
+    const userId = req.currentUser?.uid;
     const { matchId } = req.params;
 
     if (!userId) {
@@ -200,7 +231,6 @@ export const joinMatch = async (req: Request, res: Response) => {
 
     const matchRef = db.collection('partidasAbertas').doc(matchId);
 
-    // Executa a lógica como uma transação para evitar race conditions
     await db.runTransaction(async (transaction) => {
       const matchDoc = await transaction.get(matchRef);
 
@@ -210,7 +240,7 @@ export const joinMatch = async (req: Request, res: Response) => {
 
       const matchData = matchDoc.data()!;
 
-      // --- Regras de Negócio ---
+      // --- Business Rules ---
       if (matchData.status !== 'aberta') {
         throw new Error('Esta partida não está mais aberta a novos participantes.');
       }
@@ -220,27 +250,26 @@ export const joinMatch = async (req: Request, res: Response) => {
       if (matchData.participantesIds.includes(userId)) {
         throw new Error('Você já está participando desta partida.');
       }
+      // Check if already pending
+      if (matchData.participantesPendentes && matchData.participantesPendentes.includes(userId)) {
+        throw new Error('Sua solicitação já está pendente.');
+      }
       if (matchData.startTime.toDate() < new Date()) {
         throw new Error('Esta partida já ocorreu.');
       }
 
-      // --- Atualização dos dados ---
-      const novasVagas = matchData.vagasDisponiveis - 1;
-      const novoStatus = (novasVagas === 0) ? 'fechada' : 'aberta';
-
+      // --- Update Data ---
+      // Add to pending list, NOT confirmed list
       transaction.update(matchRef, {
-        participantesIds: admin.firestore.FieldValue.arrayUnion(userId), // Adiciona o ID à lista
-        vagasDisponiveis: admin.firestore.FieldValue.increment(-1), // Decrementa 1
-        status: novoStatus, // Atualiza o status se as vagas acabarem
+        participantesPendentes: admin.firestore.FieldValue.arrayUnion(userId)
       });
     });
 
-    return res.status(200).json({ message: 'Você entrou na partida com sucesso!' });
+    return res.status(200).json({ message: 'Solicitação enviada! Aguarde a aprovação do organizador.' });
 
   } catch (error: any) {
-    console.error('Erro ao entrar na partida:', error);
-    // Retorna a mensagem de erro da regra de negócio (ex: "Não há mais vagas")
-    return res.status(400).json({ message: error.message || 'Erro interno ao entrar na partida.' });
+    console.error('Erro ao solicitar entrada na partida:', error);
+    return res.status(400).json({ message: error.message || 'Erro interno ao solicitar entrada.' });
   }
 };
 
@@ -292,5 +321,90 @@ export const leaveMatch = async (req: Request, res: Response) => {
     console.error('Erro ao sair da partida:', error);
     // Retorna a mensagem de erro da regra de negócio
     return res.status(400).json({ message: error.message || 'Erro interno ao sair da partida.' });
+  }
+};
+
+export const approveRequest = async (req: Request, res: Response) => {
+  try {
+    const organizerId = req.currentUser?.uid;
+    const { matchId } = req.params;
+    const { userIdToApprove } = req.body; // ID of the user to approve
+
+    if (!organizerId) return res.status(403).json({ message: 'Acesso negado.' });
+    if (!userIdToApprove) return res.status(400).json({ message: 'ID do usuário a aprovar é obrigatório.' });
+
+    const matchRef = db.collection('partidasAbertas').doc(matchId);
+
+    await db.runTransaction(async (transaction) => {
+      const matchDoc = await transaction.get(matchRef);
+      if (!matchDoc.exists) throw new Error('Partida não encontrada.');
+
+      const matchData = matchDoc.data()!;
+
+      if (matchData.organizadorId !== organizerId) {
+        throw new Error('Apenas o organizador pode aprovar solicitações.');
+      }
+      if (!matchData.participantesPendentes || !matchData.participantesPendentes.includes(userIdToApprove)) {
+        throw new Error('Este usuário não tem uma solicitação pendente.');
+      }
+      if (matchData.vagasDisponiveis <= 0) {
+        throw new Error('Não há mais vagas disponíveis.');
+      }
+
+      // Move from pending to confirmed
+      const novasVagas = matchData.vagasDisponiveis - 1;
+      const novoStatus = (novasVagas === 0) ? 'fechada' : 'aberta';
+
+      transaction.update(matchRef, {
+        participantesPendentes: admin.firestore.FieldValue.arrayRemove(userIdToApprove),
+        participantesIds: admin.firestore.FieldValue.arrayUnion(userIdToApprove),
+        vagasDisponiveis: admin.firestore.FieldValue.increment(-1),
+        status: novoStatus
+      });
+    });
+
+    return res.status(200).json({ message: 'Solicitação aprovada com sucesso!' });
+
+  } catch (error: any) {
+    console.error('Erro ao aprovar solicitação:', error);
+    return res.status(400).json({ message: error.message || 'Erro ao aprovar solicitação.' });
+  }
+};
+
+export const rejectRequest = async (req: Request, res: Response) => {
+  try {
+    const organizerId = req.currentUser?.uid;
+    const { matchId } = req.params;
+    const { userIdToReject } = req.body;
+
+    if (!organizerId) return res.status(403).json({ message: 'Acesso negado.' });
+    if (!userIdToReject) return res.status(400).json({ message: 'ID do usuário a recusar é obrigatório.' });
+
+    const matchRef = db.collection('partidasAbertas').doc(matchId);
+
+    await db.runTransaction(async (transaction) => {
+      const matchDoc = await transaction.get(matchRef);
+      if (!matchDoc.exists) throw new Error('Partida não encontrada.');
+
+      const matchData = matchDoc.data()!;
+
+      if (matchData.organizadorId !== organizerId) {
+        throw new Error('Apenas o organizador pode recusar solicitações.');
+      }
+      if (!matchData.participantesPendentes || !matchData.participantesPendentes.includes(userIdToReject)) {
+        throw new Error('Este usuário não tem uma solicitação pendente.');
+      }
+
+      // Just remove from pending list
+      transaction.update(matchRef, {
+        participantesPendentes: admin.firestore.FieldValue.arrayRemove(userIdToReject)
+      });
+    });
+
+    return res.status(200).json({ message: 'Solicitação recusada.' });
+
+  } catch (error: any) {
+    console.error('Erro ao recusar solicitação:', error);
+    return res.status(400).json({ message: error.message || 'Erro ao recusar solicitação.' });
   }
 };

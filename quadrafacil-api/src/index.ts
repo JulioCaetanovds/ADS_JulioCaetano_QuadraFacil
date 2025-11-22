@@ -5,6 +5,7 @@ import authRouter from './routes/auth.routes';
 import courtRouter from './routes/court.routes';
 import bookingRouter from './routes/booking.routes';
 import matchRouter from './routes/match.routes';
+import chatRouter from './routes/chat.routes';
 
 const app = express();
 const PORT = 3000;
@@ -21,6 +22,7 @@ app.use('/auth', authRouter);
 app.use('/courts', courtRouter);
 app.use('/bookings', bookingRouter);
 app.use('/matches', matchRouter);
+app.use('/chats', chatRouter);
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT} 🚀`);
