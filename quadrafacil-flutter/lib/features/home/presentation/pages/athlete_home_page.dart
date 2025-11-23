@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart'; // Para formatar datas
+import 'dart:async';
 
 import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
@@ -391,8 +392,8 @@ class ExploreTab extends StatefulWidget {
 }
 
 class _ExploreTabState extends State<ExploreTab> {
-  List<dynamic> _courtsData = []; 
-  List<dynamic> _openMatchesData = []; 
+  List<dynamic> _courtsData = [];
+  List<dynamic> _openMatchesData = [];
   
   bool _isLoadingCourts = true;
   bool _isLoadingMatches = true; 
@@ -417,18 +418,11 @@ class _ExploreTabState extends State<ExploreTab> {
           _isLoadingCourts = false;
         });
       } else {
-        throw Exception('Falha ao carregar quadras públicas: ${response.body}');
+        throw Exception('Falha ao carregar quadras: ${response.body}');
       }
     } catch (e) {
-      print('Erro ao buscar quadras públicas: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red),
-        );
-        setState(() => _isLoadingCourts = false);
-      }
+      print('Erro ao buscar quadras: $e');
+      if (mounted) setState(() => _isLoadingCourts = false);
     }
   }
 
@@ -445,26 +439,18 @@ class _ExploreTabState extends State<ExploreTab> {
           _isLoadingMatches = false;
         });
       } else {
-        throw Exception('Falha ao carregar partidas abertas: ${response.body}');
+        throw Exception('Falha ao carregar partidas: ${response.body}');
       }
     } catch (e) {
-      print('Erro ao buscar partidas abertas: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red),
-        );
-        setState(() => _isLoadingMatches = false);
-      }
+      print('Erro ao buscar partidas: $e');
+      if (mounted) setState(() => _isLoadingMatches = false);
     }
   }
 
   String _formatMatchTime(dynamic timestamp) {
     DateTime? startTime;
     if (timestamp is Map && timestamp['_seconds'] != null) {
-      startTime =
-          DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
+      startTime = DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
     } else if (timestamp is String) {
       startTime = DateTime.tryParse(timestamp);
     }
@@ -488,9 +474,7 @@ class _ExploreTabState extends State<ExploreTab> {
 
   @override
   Widget build(BuildContext context) {
-    final userName =
-        FirebaseAuth.instance.currentUser?.displayName?.split(' ').first ??
-            'Atleta';
+    final userName = FirebaseAuth.instance.currentUser?.displayName?.split(' ').first ?? 'Atleta';
 
     return Scaffold(
       appBar: AppBar(
@@ -499,15 +483,9 @@ class _ExploreTabState extends State<ExploreTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Olá, $userName!',
-                style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.normal,
-                    color: AppTheme.hintColor)),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal, color: AppTheme.hintColor)),
             const Text('Encontre sua próxima partida',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textColor)),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
           ],
         ),
         toolbarHeight: 80,
@@ -520,16 +498,7 @@ class _ExploreTabState extends State<ExploreTab> {
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
-            TextField(
-              decoration: const InputDecoration(
-                hintText: 'Buscar por quadra ou esporte...',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (value) {
-                print('Buscando por: $value');
-              },
-            ),
-            const SizedBox(height: 24),
+            // REMOVIDO: O TextField de busca global
 
             _buildSectionHeader('Partidas Abertas', () {
               Navigator.of(context).push(
@@ -549,7 +518,6 @@ class _ExploreTabState extends State<ExploreTab> {
                           itemCount: _openMatchesData.length,
                           itemBuilder: (context, index) {
                             final match = _openMatchesData[index];
-
                             final vagas = match['vagasDisponiveis'] ?? 0;
                             final esporte = match['esporte'] ?? 'N/D';
                             final horario = _formatMatchTime(match['startTime']);
@@ -591,22 +559,15 @@ class _ExploreTabState extends State<ExploreTab> {
                             final court = _courtsData[index];
                             final courtId = court['id'] ?? 'unknown_id_$index';
                             final nome = court['nome'] ?? 'Quadra sem nome';
-                            final endereco =
-                                court['endereco'] ?? 'Endereço indisponível';
-                            final esporte =
-                                court['esporte'] ?? 'Esporte não definido';
+                            final endereco = court['endereco'] ?? 'Endereço indisponível';
+                            final esporte = court['esporte'] ?? 'Esporte não definido';
                             
                             String pricePerHourStr = 'N/D';
                             if (court['availability'] is Map) {
-                              final availabilityMap =
-                                  court['availability'] as Map<String, dynamic>;
+                              final availabilityMap = court['availability'] as Map<String, dynamic>;
                               for (var dayData in availabilityMap.values) {
-                                if (dayData is Map &&
-                                    dayData['pricePerHour'] != null) {
-                                  pricePerHourStr = dayData['pricePerHour']
-                                          ?.toStringAsFixed(2)
-                                          ?.replaceAll('.', ',') ??
-                                      'N/D';
+                                if (dayData is Map && dayData['pricePerHour'] != null) {
+                                  pricePerHourStr = dayData['pricePerHour']?.toStringAsFixed(2)?.replaceAll('.', ',') ?? 'N/D';
                                   break;
                                 }
                               }
@@ -632,11 +593,7 @@ class _ExploreTabState extends State<ExploreTab> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title,
-            style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textColor)),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
         TextButton(onPressed: onViewAll, child: const Text('Ver todas')),
       ],
     );

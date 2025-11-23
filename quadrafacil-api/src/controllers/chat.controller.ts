@@ -50,39 +50,54 @@ export const getUserChats = async (req: Request, res: Response) => {
 };
 
 
-// --- Função para ENVIAR uma nova mensagem (POST /chats/:chatId/messages) ---
 export const sendMessage = async (req: Request, res: Response) => {
     try {
         const userId = req.currentUser?.uid;
         const { chatId } = req.params;
-        const { texto } = req.body;
+        const { texto } = req.body; 
 
-        if (!userId || !chatId || !texto) {
-            return res.status(400).json({ message: 'Usuário, Chat ID e Texto são obrigatórios.' });
-        }
+        if (!userId) return res.status(403).json({ message: 'Acesso negado.' });
+        if (!texto || texto.trim() === '') return res.status(400).json({ message: 'A mensagem não pode ser vazia.' });
 
-        const conversaRef = db.collection('conversas').doc(chatId);
+        const chatRef = db.collection('conversas').doc(chatId);
         
-        // 1. Cria a mensagem na subcoleção 'mensagens'
-        await conversaRef.collection('mensagens').add({
-            remetenteId: userId,
-            texto: texto,
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        await db.runTransaction(async (transaction) => {
+            const chatDoc = await transaction.get(chatRef);
 
-        // 2. Atualiza o documento principal da conversa com a última mensagem (para ordenação)
-        await conversaRef.update({
-            ultimaMensagem: {
-                texto: texto.substring(0, 50) + (texto.length > 50 ? '...' : ''), // Preview da mensagem
+            if (!chatDoc.exists) throw new Error('Chat não encontrado.');
+            
+            const chatData = chatDoc.data();
+            if (!chatData?.participantesIds.includes(userId)) {
+                throw new Error('Você não é um participante deste chat.');
+            }
+            
+            // 1. Adiciona a mensagem à subcoleção 'mensagens'
+            const newMessage = {
+                remetenteId: userId,
+                texto: texto,
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            },
+            };
+            
+            const messageRef = chatRef.collection('mensagens').doc();
+            transaction.set(messageRef, newMessage);
+
+            // 2. Atualiza o status da conversa principal
+            transaction.update(chatRef, {
+                ultimaMensagem: {
+                    texto: texto,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    remetenteId: userId,
+                },
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            // TODO: (RF12) Implementar a Notificação Push aqui
         });
 
-        return res.status(201).json({ message: 'Mensagem enviada.' });
+        return res.status(201).json({ message: 'Mensagem enviada com sucesso!' });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Erro ao enviar mensagem:', error);
-        return res.status(500).json({ message: 'Erro interno ao enviar mensagem.' });
+        return res.status(400).json({ message: error.message || 'Erro ao enviar mensagem.' });
     }
 };
 
@@ -92,77 +107,219 @@ export const getOrCreateMatchChat = async (req: Request, res: Response) => {
         const { matchId } = req.params;
 
         if (!userId) {
-            return res.status(403).json({ message: 'Acesso negado.' });
-        }
-        if (!matchId) {
-            return res.status(400).json({ message: 'ID da partida é obrigatório.' });
+            return res.status(403).json({ message: 'Acesso negado. Usuário não autenticado.' });
         }
 
-        // 1. Verificar se o chat já existe para esta partida
+        // 1. Tenta encontrar um chat existente para a partida
         const existingChatSnapshot = await db.collection('conversas')
             .where('matchId', '==', matchId)
             .limit(1)
             .get();
 
-        if (existingChatSnapshot.empty) {
-            // --- Chat não existe: Criar um novo ---
-
-            // A. Buscar todos os UIDs necessários (Organizadores, Participantes e Dono da Quadra)
-            const matchDoc = await db.collection('partidasAbertas').doc(matchId).get();
-            if (!matchDoc.exists) {
-                return res.status(404).json({ message: 'Partida não encontrada para criar o chat.' });
-            }
-            const matchData = matchDoc.data()!;
-            const courtId = matchData.quadraId; // ID da quadra na partida
-
-            // Buscar ID do Dono da Quadra
-            const courtDoc = await db.collection('quadras').doc(courtId).get();
-            const courtOwnerId = courtDoc.exists ? courtDoc.data()?.ownerId : null;
-
-            const confirmedParticipants: string[] = matchData.participantesIds || [];
-            
-            // 2. Montar a lista final de UIDs (Organizadores, Dono da Quadra, Participantes)
-            let allParticipants = new Set<string>(confirmedParticipants);
-            if (courtOwnerId) {
-                allParticipants.add(courtOwnerId);
-            }
-            
-            const participantesIdsArray = Array.from(allParticipants);
-            
-            // 3. Criar a nova conversa
-            const newChatRef = await db.collection('conversas').add({
-                matchId: matchId, // Linka o chat diretamente à partida
-                participantesIds: participantesIdsArray,
-                titulo: matchData.quadraNome || 'Chat da Partida', // Usa o nome da quadra como título
-                ultimaMensagem: {
-                    texto: 'Chat criado para a partida!',
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                },
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-
-            return res.status(201).json({
-                message: 'Chat de grupo criado com sucesso!',
-                chatId: newChatRef.id,
-                isNew: true,
-            });
-
-        } else {
-            // --- Chat já existe: Apenas retornar a ID existente ---
+        if (!existingChatSnapshot.empty) {
             const existingChatId = existingChatSnapshot.docs[0].id;
-
-            return res.status(200).json({
-                message: 'Chat de grupo encontrado.',
-                chatId: existingChatId,
-                isNew: false,
-            });
+            return res.status(200).json({ chatId: existingChatId, message: 'Chat existente retornado.' });
         }
 
+        // 2. Se não existir, busca dados da partida para criar o chat
+        const matchDoc = await db.collection('partidasAbertas').doc(matchId).get();
+        if (!matchDoc.exists) {
+            return res.status(404).json({ message: 'Partida não encontrada para criar o chat.' });
+        }
+
+        const matchData = matchDoc.data()!;
+        const organizadorId = matchData.organizadorId;
+        const participantesIds = matchData.participantesIds || [];
+        
+        // Garante que o organizador e participantes confirmados estejam na lista
+        const initialParticipants = Array.from(new Set([organizadorId, ...participantesIds]));
+
+        // 3. Cria um novo chat
+        const newChat = {
+            tipo: 'grupo', 
+            matchId: matchId,
+            participantesIds: initialParticipants,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            ultimaMensagem: {
+                texto: `${matchData.quadraNome || 'A partida'} foi criada!`,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            },
+        };
+
+        const chatRef = await db.collection('conversas').add(newChat);
+        return res.status(201).json({ chatId: chatRef.id, message: 'Novo chat criado.' });
+
     } catch (error) {
-        console.error('Erro ao criar/buscar chat de grupo:', error);
-        return res.status(500).json({ message: 'Erro interno ao criar/buscar chat.' });
+        console.error('Erro ao buscar/criar chat de partida:', error);
+        return res.status(500).json({ message: 'Erro interno ao processar chat.' });
     }
 };
 
-// TODO: Adicionar função para buscar histórico de mensagens
-// TODO: Adicionar função para iniciar nova conversa (Verificar se já existe)
+export const addMemberToMatchChat = async (matchId: string, userId: string) => {
+    try {
+        const chatSnapshot = await db.collection('conversas')
+            .where('matchId', '==', matchId)
+            .limit(1)
+            .get();
+
+        if (!chatSnapshot.empty) {
+            const chatId = chatSnapshot.docs[0].id;
+            const chatRef = db.collection('conversas').doc(chatId);
+
+            await chatRef.update({
+                participantesIds: admin.firestore.FieldValue.arrayUnion(userId),
+                ultimaMensagem: {
+                    texto: 'Novo membro entrou no chat.',
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                },
+            });
+            return { success: true };
+        }
+    } catch (error) {
+        console.error(`Erro ao adicionar usuário ${userId} ao chat ${matchId}:`, error);
+        return { success: false, error };
+    }
+};
+
+export const removeMemberFromMatchChat = async (matchId: string, userId: string) => {
+    try {
+        const chatSnapshot = await db.collection('conversas')
+            .where('matchId', '==', matchId)
+            .limit(1)
+            .get();
+
+        if (!chatSnapshot.empty) {
+            const chatId = chatSnapshot.docs[0].id;
+            const chatRef = db.collection('conversas').doc(chatId);
+
+            await chatRef.update({
+                participantesIds: admin.firestore.FieldValue.arrayRemove(userId),
+                ultimaMensagem: {
+                    texto: 'Um membro saiu do chat.',
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                },
+            });
+            return { success: true };
+        }
+    } catch (error) {
+        console.error(`Erro ao remover usuário ${userId} do chat ${matchId}:`, error);
+        return { success: false, error };
+    }
+};
+
+export const getChatMessages = async (req: Request, res: Response) => {
+    try {
+        const userId = req.currentUser?.uid;
+        const { chatId } = req.params;
+
+        if (!userId) {
+            return res.status(403).json({ message: 'Acesso negado. Usuário não autenticado.' });
+        }
+
+        // 1. Verificar se o chat existe e se o usuário é participante
+        const chatDoc = await db.collection('conversas').doc(chatId).get();
+
+        if (!chatDoc.exists) {
+            return res.status(404).json({ message: 'Chat não encontrado.' });
+        }
+
+        const chatData = chatDoc.data();
+        if (!chatData?.participantesIds.includes(userId)) {
+            return res.status(403).json({ message: 'Você não é um participante deste chat.' });
+        }
+
+        // 2. Buscar as 50 mensagens mais recentes
+        const messagesSnapshot = await db.collection('conversas').doc(chatId)
+            .collection('mensagens')
+            .orderBy('timestamp', 'desc') 
+            .limit(50) 
+            .get();
+
+        const messages = messagesSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp ? doc.data().timestamp.toDate() : null 
+        })).reverse(); 
+
+        return res.status(200).json(messages);
+
+    } catch (error) {
+        console.error('Erro ao buscar mensagens do chat:', error);
+        return res.status(500).json({ message: 'Erro interno ao buscar mensagens.' });
+    }
+};
+
+export const getOrCreateBookingChat = async (req: Request, res: Response) => {
+    try {
+        const currentUserId = req.currentUser?.uid;
+        const { bookingId } = req.params;
+
+        if (!currentUserId) return res.status(403).json({ message: 'Acesso negado.' });
+        if (!bookingId) return res.status(400).json({ message: 'ID da reserva inválido.' });
+
+        // 1. Verificar se já existe chat
+        const existingChatSnapshot = await db.collection('conversas')
+            .where('bookingId', '==', bookingId)
+            .limit(1)
+            .get();
+
+        if (!existingChatSnapshot.empty) {
+            return res.status(200).json({ chatId: existingChatSnapshot.docs[0].id });
+        }
+
+        // 2. Buscar dados da Reserva
+        const bookingDoc = await db.collection('reservas').doc(bookingId).get();
+        
+        if (!bookingDoc.exists) {
+            return res.status(404).json({ message: 'Reserva não encontrada.' });
+        }
+        
+        const bookingData = bookingDoc.data()!;
+        
+        // --- CORREÇÃO AQUI: Lendo os campos em Inglês OU Português ---
+        const atletaId = bookingData.userId || bookingData.usuarioId;
+        // const quadraId = bookingData.courtId || bookingData.quadraId; // Nem vamos precisar se já tiver o ownerId
+        
+        // Otimização: Se já tem o ownerId na reserva, usa direto!
+        let donoId = bookingData.ownerId; 
+        let quadraNome = bookingData.quadraNome || 'Quadra';
+
+        // Fallback: Se por acaso não tiver ownerId, buscamos na quadra (segurança)
+        if (!donoId) {
+             const quadraId = bookingData.courtId || bookingData.quadraId;
+             if (quadraId) {
+                const courtDoc = await db.collection('quadras').doc(quadraId).get();
+                if (courtDoc.exists) {
+                    donoId = courtDoc.data()?.donoId;
+                    quadraNome = courtDoc.data()?.nome || quadraNome;
+                }
+             }
+        }
+
+        if (!donoId || !atletaId) {
+             console.error('❌ Dados incompletos na reserva:', bookingData);
+             return res.status(400).json({ message: 'Reserva com dados inconsistentes (falta ID de dono ou atleta).' });
+        }
+
+        // 3. Criar o Chat
+        const newChat = {
+            tipo: 'reserva',
+            bookingId: bookingId,
+            participantesIds: [atletaId, donoId], // IDs Corretos agora!
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            ultimaMensagem: {
+                texto: `Chat iniciado sobre a reserva: ${quadraNome}`,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            }
+        };
+
+        const chatRef = await db.collection('conversas').add(newChat);
+        return res.status(201).json({ chatId: chatRef.id, message: 'Chat criado.' });
+
+    } catch (error: any) {
+        console.error('🔥 ERRO NO CONTROLLER DE CHAT:', error);
+        return res.status(500).json({ message: 'Erro interno ao criar chat.' });
+    }
+};

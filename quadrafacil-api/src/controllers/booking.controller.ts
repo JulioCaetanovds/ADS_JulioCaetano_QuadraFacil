@@ -232,32 +232,20 @@ export const getBookingsByAthlete = async (req: Request, res: Response) => {
 };
 
 
-// --- Função para CANCELAR uma reserva (Atleta) ---
-// (Sem alterações)
 export const cancelBooking = async (req: Request, res: Response) => {
   try {
     const userId = req.currentUser?.uid; 
     const { bookingId } = req.params; 
 
-    if (!userId) {
-      return res.status(403).json({ message: 'Acesso negado.' });
-    }
-    if (!bookingId) {
-      return res.status(400).json({ message: 'ID da reserva é obrigatório.' });
-    }
+    if (!userId) return res.status(403).json({ message: 'Acesso negado.' });
+    if (!bookingId) return res.status(400).json({ message: 'ID da reserva é obrigatório.' });
 
     const bookingRef = db.collection('reservas').doc(bookingId);
     const bookingDoc = await bookingRef.get();
 
-    if (!bookingDoc.exists) {
-      return res.status(404).json({ message: 'Reserva não encontrada.' });
-    }
+    if (!bookingDoc.exists) return res.status(404).json({ message: 'Reserva não encontrada.' });
 
-    const bookingData = bookingDoc.data();
-
-    if (!bookingData) {
-      return res.status(404).json({ message: 'Não foi possível ler os dados da reserva.' });
-    }
+    const bookingData = bookingDoc.data()!;
 
     if (bookingData.userId !== userId) {
       return res.status(403).json({ message: 'Você não tem permissão para cancelar esta reserva.' });
@@ -267,33 +255,39 @@ export const cancelBooking = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Esta reserva não pode mais ser cancelada.' });
     }
 
-    const startTime = bookingData.startTime.toDate(); // Em UTC
-    const now = new Date(); // Em UTC
-
+    // Regras de Horário (Mantidas do seu código original)
+    const startTime = bookingData.startTime.toDate();
+    const now = new Date();
     if (startTime < now) {
       return res.status(400).json({ message: 'Não é possível cancelar uma reserva que já ocorreu.' });
     }
-
-    const startOfBookingDayUtc = new Date(Date.UTC(
-      startTime.getUTCFullYear(),
-      startTime.getUTCMonth(),
-      startTime.getUTCDate()
-    ));
-
-    const startOfTodayUtc = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate()
-    ));
-
+    const startOfBookingDayUtc = new Date(Date.UTC(startTime.getUTCFullYear(), startTime.getUTCMonth(), startTime.getUTCDate()));
+    const startOfTodayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    
     if (startOfBookingDayUtc.getTime() === startOfTodayUtc.getTime()) {
       return res.status(400).json({ message: 'Não é possível cancelar uma reserva no mesmo dia do jogo.' });
     }
 
+    // 1. Atualiza a Reserva
     await bookingRef.update({
       status: 'cancelada',
       updatedAt: admin.firestore.FieldValue.serverTimestamp() 
     });
+
+    // --- CORREÇÃO AQUI: Cancelar também a Partida Aberta vinculada ---
+    const matchesSnapshot = await db.collection('partidasAbertas')
+        .where('reservaId', '==', bookingId) // Procura partidas ligadas a esta reserva
+        .get();
+
+    if (!matchesSnapshot.empty) {
+        const batch = db.batch();
+        matchesSnapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { status: 'cancelada' });
+        });
+        await batch.commit();
+        console.log('Partida pública vinculada foi cancelada automaticamente.');
+    }
+    // ----------------------------------------------------------------
 
     return res.status(200).json({ message: 'Reserva cancelada com sucesso.' });
 
@@ -342,36 +336,44 @@ export const confirmBooking = async (req: Request, res: Response) => {
   }
 };
 
-// --- Função para DONO RECUSAR (cancelar) uma reserva ---
-// (Sem alterações)
 export const rejectBooking = async (req: Request, res: Response) => {
   try {
     const ownerId = req.currentUser?.uid;
     const { bookingId } = req.params;
 
-    if (!ownerId) {
-      return res.status(403).json({ message: 'Acesso negado.' });
-    }
+    if (!ownerId) return res.status(403).json({ message: 'Acesso negado.' });
 
     const bookingRef = db.collection('reservas').doc(bookingId);
     const bookingDoc = await bookingRef.get();
 
-    if (!bookingDoc.exists) {
-      return res.status(404).json({ message: 'Reserva não encontrada.' });
-    }
-    const bookingData = bookingDoc.data();
-    if (!bookingData) {
-      return res.status(404).json({ message: 'Dados da reserva não encontrados.' });
-    }
+    if (!bookingDoc.exists) return res.status(404).json({ message: 'Reserva não encontrada.' });
+    
+    const bookingData = bookingDoc.data()!;
 
     if (bookingData.ownerId !== ownerId) {
       return res.status(403).json({ message: 'Você não tem permissão para alterar esta reserva.' });
     }
 
+    // 1. Atualiza a Reserva
     await bookingRef.update({
       status: 'cancelada', 
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
+
+    // --- CORREÇÃO AQUI: Cancelar também a Partida Aberta vinculada ---
+    const matchesSnapshot = await db.collection('partidasAbertas')
+        .where('reservaId', '==', bookingId)
+        .get();
+
+    if (!matchesSnapshot.empty) {
+        const batch = db.batch();
+        matchesSnapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { status: 'cancelada' });
+        });
+        await batch.commit();
+        console.log('Partida pública vinculada foi cancelada pelo dono.');
+    }
+    // ----------------------------------------------------------------
 
     return res.status(200).json({ message: 'Reserva recusada/cancelada com sucesso.' });
 

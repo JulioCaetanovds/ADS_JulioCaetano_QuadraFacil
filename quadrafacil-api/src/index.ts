@@ -24,8 +24,9 @@ app.use('/bookings', bookingRouter);
 app.use('/matches', matchRouter);
 app.use('/chats', chatRouter);
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => { 
   console.log(`Servidor rodando na porta ${PORT} 🚀`);
+  console.log(`Acesso externo (Celular): http://192.168.0.6:${PORT}/`);
 });
 
 export default app;

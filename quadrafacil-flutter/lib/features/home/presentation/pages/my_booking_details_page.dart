@@ -7,8 +7,9 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import 'package:quadrafacil/core/config.dart';
-// 1. Importa a tela de detalhes da partida
+// 1. Importa as telas de destino (MatchDetailsPage e ChatDetailPage)
 import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart';
+import 'package:quadrafacil/features/chat/presentation/pages/chat_detail_page.dart'; 
 
 class MyBookingDetailsPage extends StatefulWidget {
   final Map<String, dynamic> booking;
@@ -22,6 +23,7 @@ class MyBookingDetailsPage extends StatefulWidget {
 class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
   bool _isCancelling = false;
   bool _isOpeningMatch = false;
+  bool _isAccessingChat = false; // Estado de loading para o chat
   
   String? _partidaAbertaId; 
   final _vagasController = TextEditingController(text: '1');
@@ -29,7 +31,6 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
   @override
   void initState() {
     super.initState();
-    // Verifica se a partida já foi aberta
     _partidaAbertaId = widget.booking['partidaAbertaId'];
   }
 
@@ -37,6 +38,105 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
   void dispose() {
     _vagasController.dispose();
     super.dispose();
+  }
+
+  // --- Lógica do Chat de Grupo (RF11) ---
+  Future<void> _handleMatchChat() async {
+    if (_isAccessingChat) return;
+    setState(() => _isAccessingChat = true);
+
+    try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) throw Exception('Usuário não autenticado.');
+        final idToken = await user.getIdToken(true);
+
+        // A. Chama a API POST para criar ou buscar o Chat de Grupo
+        final url = Uri.parse('${AppConfig.apiUrl}/chats/match/${_partidaAbertaId!}');
+        final response = await http.post(
+            url,
+            headers: {
+                'Authorization': 'Bearer $idToken',
+                'Content-Type': 'application/json',
+            },
+        );
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+            final responseData = jsonDecode(response.body);
+            final chatId = responseData['chatId'];
+            final chatTitle = widget.booking['quadraNome'] ?? 'Chat da Partida';
+
+            if (mounted) {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Chat pronto! Abrindo conversa...')),
+                );
+                // B. NAVEGAÇÃO PARA A TELA DE CHAT
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => ChatDetailPage(chatId: chatId, title: chatTitle)
+                ));
+            }
+        } else {
+            final error = jsonDecode(response.body);
+            throw Exception(error['message'] ?? 'Falha ao iniciar o chat de grupo.');
+        }
+
+    } catch (e) {
+        if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+            );
+        }
+    } finally {
+        if (mounted) setState(() => _isAccessingChat = false);
+    }
+}
+
+Future<void> _handleOwnerChat() async {
+    if (_isAccessingChat) return;
+    setState(() => _isAccessingChat = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuário não autenticado.');
+      final idToken = await user.getIdToken(true);
+      final bookingId = widget.booking['id']; // Pega o ID da reserva
+
+      // A. Chama a API POST correta para chat de Reserva
+      final url = Uri.parse('${AppConfig.apiUrl}/chats/booking/$bookingId');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $idToken',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = jsonDecode(response.body);
+        final chatId = responseData['chatId'];
+        // Nome da tela será o nome da Quadra
+        final chatTitle = widget.booking['quadraNome'] ?? 'Falar com o Dono';
+
+        if (mounted) {
+           // B. NAVEGAÇÃO PARA A TELA DE CHAT
+           Navigator.of(context).push(MaterialPageRoute(
+             builder: (context) => ChatDetailPage(chatId: chatId, title: chatTitle)
+           ));
+        }
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['message'] ?? 'Falha ao iniciar chat com o dono.');
+      }
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isAccessingChat = false);
+    }
   }
 
   Future<void> _showCancelConfirmationDialog(String bookingId) async {
@@ -276,8 +376,22 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
                 foregroundColor: Colors.white
               ),
             ),
+          const SizedBox(height: 12), // Espaçamento
 
-          // 2. Botão para GERENCIAR Partida (Se já foi aberta)
+          // 2. Botão de CHAT (Visível se a reserva estiver confirmada - Chat Dono/Atleta)
+          if (isBookingConfirmed)
+             ElevatedButton.icon(
+               onPressed: _isAccessingChat ? null : _handleOwnerChat, 
+               icon: _isAccessingChat
+                   ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                   : const Icon(Icons.chat_bubble_outline),
+               label: const Text('CHAT COM O DONO DA QUADRA'),
+               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor),
+             ),
+          
+          const SizedBox(height: 12), // Espaçamento
+
+          // 3. Botão para GERENCIAR Partida (Se já foi aberta)
           if (isMatchAlreadyOpen)
             Column(
               children: [
@@ -298,7 +412,7 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // --- AQUI ESTÁ A CORREÇÃO PARA O ATLETA 1 ---
+                // --- CORREÇÃO: Usamos o Botão para ir para a tela de Partida ---
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -318,7 +432,7 @@ class _MyBookingDetailsPageState extends State<MyBookingDetailsPage> {
                 ),
               ],
             ),
-          
+
           if (canOpenMatch || isMatchAlreadyOpen || canCancel)
             const SizedBox(height: 12),
 

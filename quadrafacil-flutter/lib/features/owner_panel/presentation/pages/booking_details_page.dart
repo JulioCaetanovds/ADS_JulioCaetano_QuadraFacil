@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
+import 'package:quadrafacil/features/chat/presentation/pages/chat_detail_page.dart'; 
 
 class BookingDetailsPage extends StatefulWidget {
   final Map<String, dynamic> booking;
@@ -20,12 +21,68 @@ class BookingDetailsPage extends StatefulWidget {
 class _BookingDetailsPageState extends State<BookingDetailsPage> {
   late String _currentStatus;
   bool _isLoading = false; 
+  bool _isAccessingChat = false; 
 
   @override
   void initState() {
     super.initState();
     _currentStatus = widget.booking['status'] ?? 'N/A';
   }
+
+  // --- Lógica do Chat com o Cliente (RF11) ---
+  // CORRIGIDO: Agora usa a rota de Booking para falar com o cliente específico
+  Future<void> _handleClientChat() async {
+    if (_isAccessingChat) return;
+    setState(() => _isAccessingChat = true);
+    
+    try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) throw Exception('Dono não autenticado.');
+        final idToken = await user.getIdToken(true);
+        
+        // 1. Pega o ID da RESERVA (e não da partida)
+        final bookingId = widget.booking['id']; 
+
+        // 2. Chama a API correta: /chats/booking/ID
+        final url = Uri.parse('${AppConfig.apiUrl}/chats/booking/$bookingId'); 
+        
+        final response = await http.post(
+            url,
+            headers: {
+                'Authorization': 'Bearer $idToken',
+                'Content-Type': 'application/json',
+            },
+        );
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+            final responseData = jsonDecode(response.body);
+            final chatId = responseData['chatId'];
+            
+            // Título do Chat: Nome do Cliente
+            final chatTitle = widget.booking['userName'] ?? widget.booking['clienteNome'] ?? 'Cliente';
+
+            if (mounted) {
+                 // NAVEGAÇÃO PARA A TELA DE CHAT
+                 Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => ChatDetailPage(chatId: chatId, title: chatTitle)
+                 ));
+            }
+        } else {
+            final error = jsonDecode(response.body);
+            throw Exception(error['message'] ?? 'Falha ao iniciar o chat.');
+        }
+
+    } catch (e) {
+        if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+            );
+        }
+    } finally {
+        if (mounted) setState(() => _isAccessingChat = false);
+    }
+  }
+  // --- Fim Lógica do Chat ---
 
   Future<void> _updateBookingStatus(String action) async {
     if (_isLoading) return;
@@ -88,9 +145,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
     return 'N/A';
   }
   
-  // Função helper para encapsular a lógica de "voltar"
   void _popWithResult() {
-    // Retorna 'true' se o status tiver sido alterado, 'false' caso contrário
     final bool statusHasChanged = _currentStatus != widget.booking['status'];
     Navigator.of(context).pop(statusHasChanged);
   }
@@ -104,24 +159,20 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
     final preco = widget.booking['priceTotal'] != null
         ? 'R\$ ${widget.booking['priceTotal'].toStringAsFixed(2).replaceAll('.', ',')}'
         : 'Valor N/D';
+    final isConfirmed = _currentStatus.toLowerCase() == 'confirmada';
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detalhes da Reserva'),
-        // O botão da setinha agora chama a função helper
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: _popWithResult, // Chama a função helper
+          onPressed: _popWithResult, 
         ),
       ),
-      // ---- CORREÇÃO AQUI ----
       body: PopScope( 
-         // 1. Intercepta o pop do sistema
          canPop: false,
-         // 2. didPop será 'false' porque interceptamos
          onPopInvoked: (didPop) {
            if (!didPop) { 
-             // 3. Executa nossa lógica de pop manualmente
              _popWithResult();
            }
          },
@@ -143,6 +194,20 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
                 title: 'Status Atual',
                 value: _currentStatus.toUpperCase()),
             const SizedBox(height: 32),
+            
+            // 4. Botão de Chat (Aparece se a reserva estiver CONFIRMADA)
+            if (isConfirmed) ...[
+                  ElevatedButton.icon(
+                    onPressed: _isAccessingChat ? null : _handleClientChat, 
+                    icon: _isAccessingChat
+                        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.chat_bubble_outline),
+                    label: const Text('CHAT COM O CLIENTE'),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor),
+                ),
+                const SizedBox(height: 32),
+            ],
+
             const Divider(),
             const SizedBox(height: 16),
             const Text(

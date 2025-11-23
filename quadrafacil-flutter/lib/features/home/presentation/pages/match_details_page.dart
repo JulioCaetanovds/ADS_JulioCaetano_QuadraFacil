@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 import 'package:quadrafacil/core/config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:quadrafacil/features/chat/presentation/pages/chat_detail_page.dart'; 
-import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart';
 
 class MatchDetailsPage extends StatefulWidget {
   final String matchId;
