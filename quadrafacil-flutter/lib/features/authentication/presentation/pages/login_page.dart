@@ -20,6 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true; // Controle para mostrar/ocultar senha
 
   @override
   void dispose() {
@@ -28,12 +29,11 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // Função de login com Firebase
   Future<void> _handleLogin() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    // Logins temporários para desenvolvimento
+    // Backdoor para Dev (Facilita seus testes)
     if (_emailController.text == 'atleta' && _passwordController.text == 'admin') {
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const AthleteHomePage()));
       return;
@@ -44,189 +44,176 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     try {
-      // 1. Login com Firebase Auth
       final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       final user = credential.user;
-      if (user == null) {
-        throw Exception('Usuário não encontrado.');
-      }
+      if (user == null) throw Exception('Usuário não encontrado.');
 
-      // 2. Pega o ID Token
       final idToken = await user.getIdToken(true);
-      
-      // 3. Verificação de nulidade (A CORREÇÃO)
-      if (idToken == null) {
-        throw Exception('Não foi possível obter o token de autenticação.');
-      }
-      
-      print('====================== ID TOKEN PARA API ======================');
-      print('Comprimento no Flutter: ${idToken.length}');
-      print(idToken);
-      print('===============================================================');
+      if (idToken == null) throw Exception('Token de autenticação inválido.');
 
-      // 4. Testa a rota protegida da API, agora com a certeza de que o token não é nulo
       await _testApiProtectedRoute(idToken);
 
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Ocorreu um erro de autenticação.'), backgroundColor: Colors.red),
-      );
+      _showErrorSnackbar(e.message ?? 'Erro de autenticação.');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
-    }
-
-    if (mounted) {
-      setState(() => _isLoading = false);
+      _showErrorSnackbar(e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Função para testar a API
   Future<void> _testApiProtectedRoute(String idToken) async {
-  final url = Uri.parse('${AppConfig.apiUrl}/auth/me'); 
+    final url = Uri.parse('${AppConfig.apiUrl}/auth/me');
+    try {
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $idToken'},
+      );
 
-  try {
-    final response = await http.get(
-      url,
-      headers: { 'Authorization': 'Bearer $idToken' },
-    );
+      if (response.statusCode == 200 && mounted) {
+        final responseBody = jsonDecode(response.body);
+        final role = responseBody['user']['role'];
 
-    if (response.statusCode == 200 && mounted) {
-      final responseBody = jsonDecode(response.body);
-      
-      // Pegamos o 'role' que a API nos enviou
-      final role = responseBody['user']['role'];
-      
-      print('Usuário logado com perfil: $role');
-
-      // Navegamos para a tela correta com base no perfil
-      if (role == 'atleta') {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const AthleteHomePage()),
-        );
-      } else if (role == 'dono') {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const OwnerHomePage()),
-        );
+        if (role == 'atleta') {
+          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const AthleteHomePage()));
+        } else if (role == 'dono') {
+          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const OwnerHomePage()));
+        } else {
+          throw Exception('Perfil desconhecido.');
+        }
       } else {
-        // Se o perfil não for reconhecido, mostramos um erro
-        throw Exception('Perfil de usuário desconhecido.');
+        throw Exception('Erro ao obter perfil: ${response.body}');
       }
-
-    } else {
-      throw Exception('Erro ao buscar perfil na API: ${response.body}');
+    } catch (e) {
+      throw Exception('Falha na conexão: $e');
     }
-  } catch (e) {
-     print('Erro de conexão com a API: $e');
-     if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
-        );
-     }
   }
-}
+
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(children: [const Icon(Icons.error_outline, color: Colors.white), const SizedBox(width: 8), Expanded(child: Text(message))]),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 48),
+                // Logo ou Ícone
+                const Icon(Icons.sports_soccer, size: 80, color: AppTheme.primaryColor),
+                const SizedBox(height: 24),
                 
-                // Cabeçalho
-                const Text('Bem-vindo de volta!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textColor)),
+                const Text(
+                  'Bem-vindo de volta!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppTheme.textColor),
+                ),
                 const SizedBox(height: 8),
-                const Text('Faça login para continuar',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: AppTheme.hintColor)),
+                Text(
+                  'Acesse sua conta para continuar',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
                 const SizedBox(height: 48),
 
-                // Formulário
+                // Campo Email
                 TextFormField(
                   controller: _emailController,
-                  decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined)),
                   keyboardType: TextInputType.emailAddress,
-                  onFieldSubmitted: (value) => _handleLogin(),
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                  onFieldSubmitted: (_) => _handleLogin(),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
+
+                // Campo Senha
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(
-                      labelText: 'Senha',
-                      prefixIcon: Icon(Icons.lock_outline)),
-                  obscureText: true,
-                  onFieldSubmitted: (value) => _handleLogin(),
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Senha',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                  onFieldSubmitted: (_) => _handleLogin(),
                 ),
+                
+                /* const SizedBox(height: 12),
+                // Link "Esqueceu a senha?" (Decorativo por enquanto)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {}, 
+                    child: const Text('Esqueceu a senha?', style: TextStyle(color: AppTheme.primaryColor)),
+                  ),
+                ), */
                 const SizedBox(height: 24),
 
-                // Botão de Entrar
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleLogin,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('ENTRAR'),
-                ),
-                const SizedBox(height: 24),
-                const Row(children: [
-                  Expanded(child: Divider()),
-                  Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Text('OU')),
-                  Expanded(child: Divider()),
-                ]),
-                const SizedBox(height: 24),
-                OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: Image.asset('assets/images/google_logo.png',
-                      height: 20.0),
-                  label: const Text('Entrar com o Google',
-                      style: TextStyle(color: AppTheme.textColor)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                // Botão Entrar
+                SizedBox(
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 2,
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                        : const Text('ENTRAR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
-                const SizedBox(height: 48),
+
+                const SizedBox(height: 40),
 
                 // Rodapé
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text("Não tem uma conta?"),
+                    Text("Não tem uma conta?", style: TextStyle(color: Colors.grey[600])),
                     TextButton(
                       onPressed: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                            builder: (context) => const RegisterPage()));
+                        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RegisterPage()));
                       },
-                      child: const Text('Cadastre-se'),
+                      child: const Text('Cadastre-se', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
               ],
             ),
           ),
