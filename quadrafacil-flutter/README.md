@@ -59,4 +59,3 @@ Veja o arquivo `LICENSE` na raiz do repositório.
 
 ## Contato
 Abra uma issue no repositório ou contacte o mantenedor para dúvidas.
-# QuadraFacil
