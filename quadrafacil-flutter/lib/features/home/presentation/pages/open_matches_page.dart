@@ -1,12 +1,11 @@
 // lib/features/home/presentation/pages/open_matches_page.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http; // 1. Importar http
-import 'dart:convert'; // 2. Importar convert
-import 'package:intl/intl.dart'; // 3. Importar intl
-import 'package:quadrafacil/core/config.dart'; // 4. Importar config
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:intl/intl.dart';
 
-// 5. Importa o OpenMatchCard e a MatchDetailsPage
-import 'package:quadrafacil/shared/widgets/open_match_card.dart';
+import 'package:quadrafacil/core/config.dart';
+import 'package:quadrafacil/core/theme/app_theme.dart';
 import 'package:quadrafacil/features/home/presentation/pages/match_details_page.dart';
 
 class OpenMatchesPage extends StatefulWidget {
@@ -17,92 +16,54 @@ class OpenMatchesPage extends StatefulWidget {
 }
 
 class _OpenMatchesPageState extends State<OpenMatchesPage> {
-  // 6. Estados para loading e dados da API
+  List<dynamic> _allMatches = [];
+  List<dynamic> _filteredMatches = [];
   bool _isLoading = true;
-  String? _errorMessage;
-  List<dynamic> _allMatchesData = []; // Lista completa da API
-  List<dynamic> _filteredMatchesData = []; // Lista para o filtro
-  
-  final _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _fetchOpenMatches(); // 7. Busca dados da API ao iniciar
-    _searchController.addListener(_filterMatches);
+    _fetchMatches();
   }
 
-  // 8. Função para buscar Partidas Abertas da API
-  Future<void> _fetchOpenMatches() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _fetchMatches() async {
+    setState(() => _isLoading = true);
     try {
       final url = Uri.parse('${AppConfig.apiUrl}/matches/public');
       final response = await http.get(url);
 
       if (response.statusCode == 200 && mounted) {
-        final data = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body) as List<dynamic>;
         setState(() {
-          _allMatchesData = data;
-          _filteredMatchesData = data; // Popula as duas listas
+          _allMatches = data;
+          _filteredMatches = data;
           _isLoading = false;
         });
       } else {
-        throw Exception('Falha ao carregar partidas: ${response.body}');
+        throw Exception('Falha ao carregar partidas');
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text('Erro ao carregar partidas.'), backgroundColor: Colors.red),
+        );
       }
     }
   }
 
-  // 9. Função de filtro atualizada para chaves da API
-  void _filterMatches() {
-    final query = _searchController.text.toLowerCase();
+  void _filterMatches(String query) {
+    final lowerQuery = query.toLowerCase();
     setState(() {
-      _filteredMatchesData = _allMatchesData.where((match) {
-        // Acessa os dados reais da API
-        final quadra = match['quadraNome']?.toLowerCase() ?? '';
-        final esporte = match['esporte']?.toLowerCase() ?? '';
-        return quadra.contains(query) || esporte.contains(query);
+      _filteredMatches = _allMatches.where((match) {
+        final esporte = (match['esporte'] ?? '').toString().toLowerCase();
+        final quadra = (match['quadraNome'] ?? '').toString().toLowerCase();
+        
+        return esporte.contains(lowerQuery) || quadra.contains(lowerQuery);
       }).toList();
     });
   }
-
-  // 10. Helper para formatar o horário (copiado da ExploreTab)
-  String _formatMatchTime(dynamic timestamp) {
-    DateTime? startTime;
-    if (timestamp is Map && timestamp['_seconds'] != null) {
-      startTime =
-          DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
-    } else if (timestamp is String) {
-      startTime = DateTime.tryParse(timestamp);
-    }
-
-    if (startTime != null) {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final tomorrow = DateTime(now.year, now.month, now.day + 1);
-      final dayOfMatch = DateTime(startTime.year, startTime.month, startTime.day);
-
-      if (dayOfMatch == today) {
-        return 'Hoje, ${DateFormat('HH:mm', 'pt_BR').format(startTime)}';
-      } else if (dayOfMatch == tomorrow) {
-        return 'Amanhã, ${DateFormat('HH:mm', 'pt_BR').format(startTime)}';
-      } else {
-        return DateFormat('E, dd/MM - HH:mm', 'pt_BR').format(startTime);
-      }
-    }
-    return 'N/A';
-  }
-
 
   @override
   void dispose() {
@@ -113,58 +74,167 @@ class _OpenMatchesPageState extends State<OpenMatchesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Todas as Partidas Abertas'),
+        title: const Text('Partidas Abertas', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: Column(
         children: [
-          Padding(
+          // Busca
+          Container(
             padding: const EdgeInsets.all(16.0),
+            color: Colors.white,
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Buscar por quadra ou esporte...',
-                prefixIcon: Icon(Icons.search),
+              onChanged: _filterMatches,
+              decoration: InputDecoration(
+                hintText: 'Filtrar por esporte ou quadra...',
+                prefixIcon: const Icon(Icons.filter_list, color: AppTheme.primaryColor),
+                filled: true,
+                fillColor: Colors.grey[100],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
           ),
-          Expanded(
-            // 11. Trata os estados de Loading e Erro
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _errorMessage != null
-                    ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)))
-                    : _filteredMatchesData.isEmpty
-                        ? const Center(child: Text("Nenhuma partida encontrada."))
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            itemCount: _filteredMatchesData.length,
-                            itemBuilder: (context, index) {
-                              final matchData = _filteredMatchesData[index];
-                              
-                              // 12. Usa os dados reais da API
-                              final vagas = matchData['vagasDisponiveis'] ?? 0;
-                              final esporte = matchData['esporte'] ?? 'N/A';
-                              final horario = _formatMatchTime(matchData['startTime']);
-                              final quadra = matchData['quadraNome'] ?? 'N/A';
-                              final matchId = matchData['id']; // ID da partida
 
-                              return OpenMatchCard(
-                                vagas: vagas,
-                                esporte: esporte,
-                                horario: horario,
-                                quadra: quadra,
-                                // 13. Adiciona o onTap para navegar
-                                onTap: () {
-                                  Navigator.of(context).push(MaterialPageRoute(
-                                    builder: (context) => MatchDetailsPage(matchId: matchId)
-                                  ));
-                                },
-                              );
-                            },
-                          ),
+          Expanded(
+            child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _filteredMatches.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.groups_outlined, size: 64, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
+                        Text("Nenhuma partida encontrada.", style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.all(16.0),
+                    itemCount: _filteredMatches.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final match = _filteredMatches[index];
+                      return _VerticalMatchCard(match: match);
+                    },
+                  ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _VerticalMatchCard extends StatelessWidget {
+  final Map<String, dynamic> match;
+
+  const _VerticalMatchCard({required this.match});
+
+  String _formatDate(dynamic timestamp) {
+    if (timestamp == null) return 'Data N/D';
+    DateTime? date;
+    if (timestamp is Map && timestamp['_seconds'] != null) {
+      date = DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
+    } else if (timestamp is String) {
+      date = DateTime.tryParse(timestamp);
+    }
+    
+    if (date == null) return 'Data N/D';
+    return DateFormat('dd/MM (EEE) • HH:mm', 'pt_BR').format(date).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final vagas = match['vagasDisponiveis'] ?? 0;
+    final esporte = match['esporte'] ?? 'Esporte';
+    final quadra = match['quadraNome'] ?? 'Quadra';
+    final dataStr = _formatDate(match['startTime']);
+    final matchId = match['id'];
+
+    // Cor baseada nas vagas (Urgência)
+    final Color vagasColor = vagas == 1 ? Colors.red : (vagas < 4 ? Colors.orange : Colors.green);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (context) => MatchDetailsPage(matchId: matchId)
+            ));
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Topo: Esporte e Data
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.sports_soccer, size: 14, color: AppTheme.primaryColor),
+                          const SizedBox(width: 4),
+                          Text(esporte, style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    Text(dataStr, style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                
+                // Meio: Nome da Quadra e Info
+                Text(quadra, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
+                const SizedBox(height: 4),
+                Text('Organizado por ${match['organizadorNome'] ?? 'Alguém'}', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                const SizedBox(height: 16),
+                
+                // Rodapé: Vagas e Botão
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.group, color: vagasColor, size: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$vagas vagas restantes',
+                          style: TextStyle(color: vagasColor, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

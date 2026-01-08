@@ -6,24 +6,17 @@ import 'package:intl/intl.dart';
 
 import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
-import 'package:quadrafacil/shared/widgets/open_match_card.dart';
 import 'package:quadrafacil/features/home/presentation/pages/booking_page.dart';
 
-// Modelo para guardar a disponibilidade parseada
 class AvailabilityInfo {
   final Map<String, dynamic> availabilityData;
   AvailabilityInfo(this.availabilityData);
-
-  Map<String, dynamic>? getDay(String dayKey) {
-    return availabilityData[dayKey];
-  }
+  Map<String, dynamic>? getDay(String dayKey) => availabilityData[dayKey];
 }
 
-// 1. NOVO Modelo para guardar os detalhes públicos
 class CourtDetailsInfo {
   final Map<String, dynamic> detailsData;
-  final String? ownerPixKey; // A chave PIX que buscamos
-
+  final String? ownerPixKey;
   CourtDetailsInfo(this.detailsData, this.ownerPixKey);
 }
 
@@ -42,23 +35,20 @@ class CourtDetailsPage extends StatefulWidget {
 }
 
 class _CourtDetailsPageState extends State<CourtDetailsPage> {
-  // 2. Agora temos DOIS futures
   Future<AvailabilityInfo>? _availabilityFuture;
-  Future<CourtDetailsInfo>? _detailsFuture; // Future para os detalhes e PIX
+  Future<CourtDetailsInfo>? _detailsFuture;
 
   DateTime _selectedDate = DateTime.now();
   TimeOfDay? _selectedTimeSlot;
-  String? _ownerPixKey; // 3. Variável local para guardar a chave PIX
+  String? _ownerPixKey;
 
   @override
   void initState() {
     super.initState();
-    // 4. Inicia as duas buscas
     _availabilityFuture = _fetchAvailability();
     _detailsFuture = _fetchPublicDetails();
   }
 
-  // (Função _fetchAvailability sem alterações)
   Future<AvailabilityInfo> _fetchAvailability() async {
     try {
       final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/availability');
@@ -66,14 +56,13 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
       if (response.statusCode == 200) {
         return AvailabilityInfo(jsonDecode(response.body));
       } else {
-        throw Exception('Falha ao carregar disponibilidade: ${response.body}');
+        throw Exception('Falha ao carregar disponibilidade.');
       }
     } catch (e) {
-      throw Exception('Erro de conexão ao buscar disponibilidade: ${e.toString()}');
+      throw Exception('Erro de conexão.');
     }
   }
 
-  // 5. NOVA Função para buscar Detalhes Públicos (incluindo PIX)
   Future<CourtDetailsInfo> _fetchPublicDetails() async {
     try {
       final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/public-details');
@@ -81,21 +70,15 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final pixKey = data['ownerPixKey'] as String?;
-        // 6. Guarda a chave PIX no estado da página
-        if (mounted) {
-          setState(() {
-            _ownerPixKey = pixKey;
-          });
-        }
+        if (mounted) setState(() => _ownerPixKey = pixKey);
         return CourtDetailsInfo(data, pixKey);
       } else {
-        throw Exception('Falha ao carregar detalhes da quadra: ${response.body}');
+        throw Exception('Falha ao carregar detalhes.');
       }
     } catch (e) {
-      throw Exception('Erro de conexão ao buscar detalhes: ${e.toString()}');
+      throw Exception('Erro de conexão.');
     }
   }
-
 
   void _onTimeSlotSelected(DateTime date, TimeOfDay? timeSlot) {
     setState(() {
@@ -106,39 +89,51 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Imagem de placeholder bonita baseada no nome
+    final imageUrl = 'https://placehold.co/600x400/2E7D32/FFFFFF/png?text=${Uri.encodeComponent(widget.courtName)}&font=roboto';
+
     return DefaultTabController(
-      length: 3, 
+      length: 3,
       child: Scaffold(
         body: NestedScrollView(
-          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-            return <Widget>[
+          headerSliverBuilder: (context, innerBoxIsScrolled) {
+            return [
               SliverAppBar(
-                expandedHeight: 220.0,
+                expandedHeight: 250.0,
                 floating: false,
                 pinned: true,
-                stretch: true,
-                iconTheme: const IconThemeData(color: Colors.white),
-                title: Text(widget.courtName, style: const TextStyle(color: Colors.white)),
                 backgroundColor: AppTheme.primaryColor,
+                leading: Container(
+                  margin: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Colors.black26,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const BackButton(color: Colors.white),
+                ),
                 flexibleSpace: FlexibleSpaceBar(
+                  // --- A CORREÇÃO ESTÁ AQUI ---
+                  // Definimos padding inferior de 60px (48px da TabBar + margem)
+                  titlePadding: const EdgeInsets.only(left: 16, bottom: 60), 
+                  title: Text(
+                    widget.courtName,
+                    style: const TextStyle(
+                      color: Colors.white, 
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18, // Tamanho fixo ajuda a não quebrar
+                      shadows: [Shadow(color: Colors.black45, blurRadius: 5)]
+                    ),
+                  ),
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.asset(
-                        'assets/images/placeholder_quadra.png',
-                        fit: BoxFit.cover,
-                      ),
+                      Image.network(imageUrl, fit: BoxFit.cover),
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withOpacity(0.6),
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.8),
-                            ],
-                            stops: const [0.0, 0.4, 1.0],
+                            colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
                           ),
                         ),
                       ),
@@ -146,119 +141,97 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
                   ),
                 ),
                 bottom: const TabBar(
-                  tabs: [
-                    Tab(text: 'SOBRE'),
-                    Tab(text: 'AGENDA'),
-                    Tab(text: 'PARTIDAS'),
-                  ],
+                  indicatorColor: Colors.white,
+                  indicatorWeight: 3,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white70,
-                  indicatorColor: Colors.white,
-                  indicatorWeight: 3.0,
+                  tabs: [Tab(text: 'SOBRE'), Tab(text: 'AGENDA'), Tab(text: 'PARTIDAS')],
                 ),
               ),
             ];
           },
           body: TabBarView(
             children: [
-              // --- Aba Sobre (Atualizada para usar FutureBuilder) ---
-              // 7. Usa o _detailsFuture para preencher a Aba 'Sobre'
+              // ABA SOBRE
               FutureBuilder<CourtDetailsInfo>(
                 future: _detailsFuture,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Erro: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
-                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                   if (snapshot.hasData) {
                     final details = snapshot.data!.detailsData;
                     return ListView(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(24),
                       children: [
                         const Text('Descrição', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        Text(details['descricao'] ?? 'Nenhuma descrição informada.'),
+                        Text(details['descricao'] ?? 'Sem descrição.', style: const TextStyle(color: Colors.black87, height: 1.5)),
                         const SizedBox(height: 24),
-                        const Text('Regras de Utilização', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const Text('Regras', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        Text(details['regras'] ?? 'Nenhuma regra informada.'),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
+                          child: Text(details['regras'] ?? 'Sem regras específicas.', style: TextStyle(color: Colors.grey[700])),
+                        ),
                         const SizedBox(height: 80),
                       ],
                     );
                   }
-                  return const Center(child: Text('Não foi possível carregar os detalhes.'));
-                }
+                  return const Center(child: Text('Erro ao carregar detalhes.'));
+                },
               ),
 
-              // --- Aba Agenda (Sem alterações na lógica) ---
+              // ABA AGENDA
               FutureBuilder<AvailabilityInfo>(
                 future: _availabilityFuture,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  else if (snapshot.hasError) {
-                    return Center(
-                        child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text('Erro ao carregar agenda: ${snapshot.error}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red)),
-                    ));
-                  }
-                  else if (snapshot.hasData) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  if (snapshot.hasData) {
                     return AgendaTabContent(
                       availability: snapshot.data!,
                       onTimeSlotSelected: _onTimeSlotSelected,
                       initialDate: _selectedDate,
                     );
                   }
-                  else {
-                    return const Center(
-                        child: Text('Nenhuma informação de agenda disponível.'));
-                  }
+                  return const Center(child: Text('Agenda indisponível.'));
                 },
               ),
 
-              // --- Aba Partidas (Sem alterações) ---
+              // ABA PARTIDAS (Placeholder por enquanto)
               ListView(
                 padding: const EdgeInsets.all(16),
                 children: const [
-                  Text('Partidas abertas nesta quadra:',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   SizedBox(height: 16),
-                  OpenMatchCard(
-                      vagas: 2,
-                      esporte: 'Futsal',
-                      horario: '20:00',
-                      quadra: 'Quadra Central'),
-                      SizedBox(height: 80), 
+                  Center(
+                    child: Column(
+                      children: [
+                        Icon(Icons.groups_outlined, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text('Nenhuma partida pública nesta quadra.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
                 ],
               ),
             ],
           ),
         ),
-        // 8. Botão flutuante ATUALIZADO
         floatingActionButton: _selectedTimeSlot != null
             ? FloatingActionButton.extended(
                 onPressed: () {
-                  // 9. Passa a 'ownerPixKey' para a BookingPage
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (context) => BookingPage(
-                              courtId: widget.courtId,
-                              courtName: widget.courtName,
-                              selectedDate: _selectedDate,
-                              selectedTimeSlot: _selectedTimeSlot!,
-                              ownerPixKey: _ownerPixKey, // <-- PASSA A CHAVE PIX
-                            )),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) => BookingPage(
+                      courtId: widget.courtId,
+                      courtName: widget.courtName,
+                      selectedDate: _selectedDate,
+                      selectedTimeSlot: _selectedTimeSlot!,
+                      ownerPixKey: _ownerPixKey,
+                    ),
+                  ));
                 },
-                label: Text(
-                    'Reservar ${DateFormat('HH:mm').format(DateTime(0, 1, 1, _selectedTimeSlot!.hour, _selectedTimeSlot!.minute))}'),
-                icon: const Icon(Icons.calendar_month_outlined),
+                label: Text('RESERVAR  ${_selectedTimeSlot!.format(context)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.check_circle),
+                backgroundColor: AppTheme.primaryColor,
               )
             : null,
       ),
@@ -266,200 +239,126 @@ class _CourtDetailsPageState extends State<CourtDetailsPage> {
   }
 }
 
-// --- WIDGET PARA O CONTEÚDO DA ABA AGENDA ---
-// (Sem alterações, mantenha seu código da AgendaTabContent como está)
+// --- COMPONENTE DE AGENDA (MANTIDO E REFATORADO VISUALMENTE) ---
 class AgendaTabContent extends StatefulWidget {
   final AvailabilityInfo availability;
   final Function(DateTime date, TimeOfDay? timeSlot) onTimeSlotSelected;
   final DateTime initialDate;
 
-  const AgendaTabContent({
-    super.key,
-    required this.availability,
-    required this.onTimeSlotSelected,
-    required this.initialDate,
-  });
+  const AgendaTabContent({super.key, required this.availability, required this.onTimeSlotSelected, required this.initialDate});
 
   @override
   State<AgendaTabContent> createState() => _AgendaTabContentState();
 }
 
 class _AgendaTabContentState extends State<AgendaTabContent> {
-  late DateTime _selectedDate; 
-  TimeOfDay? _selectedTimeSlot; 
+  late DateTime _selectedDate;
+  TimeOfDay? _selectedTimeSlot;
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = widget.initialDate; 
+    _selectedDate = widget.initialDate;
   }
 
   String _getDayKey(DateTime date) {
-    switch (date.weekday) {
-      case 1: return 'segunda';
-      case 2: return 'terca';
-      case 3: return 'quarta';
-      case 4: return 'quinta';
-      case 5: return 'sexta';
-      case 6: return 'sabado';
-      case 7: return 'domingo';
-      default: return '';
-    }
+    const days = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+    return days[date.weekday % 7]; // Fix para Domingo ser 0 ou 7 dependendo da lib
   }
 
   List<TimeOfDay> _generateTimeSlots(String startTimeStr, String endTimeStr) {
     try {
-      TimeOfDay parseTime(String timeStr) {
-        final parts = timeStr.split(':');
-        return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-      }
+      TimeOfDay parse(String s) { final p = s.split(':'); return TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1])); }
+      final start = parse(startTimeStr);
+      final end = parse(endTimeStr);
+      
+      final slots = <TimeOfDay>[];
+      var current = DateTime(2024, 1, 1, start.hour, start.minute);
+      final endTime = DateTime(2024, 1, 1, end.hour, end.minute);
 
-      TimeOfDay startTime = parseTime(startTimeStr);
-      TimeOfDay endTime = parseTime(endTimeStr);
-      List<TimeOfDay> slots = [];
-
-      DateTime current = DateTime(_selectedDate.year, _selectedDate.month,
-          _selectedDate.day, startTime.hour, startTime.minute);
-      DateTime end = DateTime(_selectedDate.year, _selectedDate.month,
-          _selectedDate.day, endTime.hour, endTime.minute);
-
-      DateTime now = DateTime.now();
+      // Filtro de hora passada (se for hoje)
+      final now = DateTime.now();
       if (DateUtils.isSameDay(_selectedDate, now)) {
-        if (now.isAfter(current)) {
-          current = DateTime(now.year, now.month, now.day, now.hour + 1);
-        }
+         if (now.hour >= current.hour) {
+            current = DateTime(2024, 1, 1, now.hour + 1, 0); // Próxima hora cheia
+         }
       }
 
-      while (current.isBefore(end)) {
-        slots.add(TimeOfDay.fromDateTime(current));
+      while (current.isBefore(endTime)) {
+        slots.add(TimeOfDay(hour: current.hour, minute: current.minute));
         current = current.add(const Duration(hours: 1));
       }
       return slots;
-    } catch (e) {
-      print("Erro ao gerar slots de horário: $e");
-      return []; 
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final selectedDay = DateTime(date.year, date.month, date.day);
-
-    if (selectedDay == today) {
-      return 'Hoje (${DateFormat('EEEE', 'pt_BR').format(date)})';
-    } else if (selectedDay == tomorrow) {
-      return 'Amanhã (${DateFormat('EEEE', 'pt_BR').format(date)})';
-    } else {
-      return DateFormat('dd/MM (EEEE)', 'pt_BR').format(date);
-    }
+    } catch (e) { return []; }
   }
 
   @override
   Widget build(BuildContext context) {
     final dayKey = _getDayKey(_selectedDate);
-    final dayAvailability = widget.availability.getDay(dayKey);
-    final isClosed = dayAvailability == null;
-    final timeSlots = isClosed
-        ? <TimeOfDay>[]
-        : _generateTimeSlots(
-            dayAvailability['startTime'], dayAvailability['endTime']);
-    final pricePerHour =
-        isClosed ? 0.0 : (dayAvailability['pricePerHour'] ?? 0.0);
+    // IMPORTANTE: Mapeamento manual para garantir compatibilidade com o backend (segunda, terca...)
+    // O backend usa keys como 'segunda', 'terca'. O DateTime.weekday 1 é Segunda.
+    final keys = ['', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+    final correctKey = keys[_selectedDate.weekday];
+
+    final dayData = widget.availability.getDay(correctKey);
+    final isClosed = dayData == null || (dayData['isOpen'] == false); // Checa se existe e se está aberto
+    
+    final timeSlots = isClosed ? <TimeOfDay>[] : _generateTimeSlots(dayData['startTime'], dayData['endTime']);
+    final price = isClosed ? 0.0 : (dayData['pricePerHour'] ?? 0.0);
 
     return ListView(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: DateUtils.isSameDay(_selectedDate, DateTime.now())
-                  ? null
-                  : () {
-                      setState(() {
-                        _selectedDate =
-                            _selectedDate.subtract(const Duration(days: 1));
-                        _selectedTimeSlot = null; 
-                      });
-                      widget.onTimeSlotSelected(_selectedDate, _selectedTimeSlot);
-                    },
-            ),
-            Text(
-              _formatDate(_selectedDate),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                setState(() {
-                  _selectedDate = _selectedDate.add(const Duration(days: 1));
-                  _selectedTimeSlot = null; 
-                });
-                widget.onTimeSlotSelected(_selectedDate, _selectedTimeSlot);
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        if (isClosed) 
-          Center(
-              child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 40.0),
-            child: Text('Fechado neste dia.',
-                style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-          ))
-        else if (timeSlots.isEmpty)
-          Center(
-              child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 40.0),
-            child: Text('Nenhum horário disponível para ${DateFormat('dd/MM').format(_selectedDate)}.', 
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-          ))
-        else 
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        // Seletor de Data
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[300]!)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                  'Horários disponíveis (R\$ ${pricePerHour.toStringAsFixed(2).replaceAll('.', ',')} / hora):',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8.0, 
-                runSpacing: 8.0, 
-                children: timeSlots.map((time) {
-                  final isSelected = _selectedTimeSlot == time;
-                  final formattedTime = DateFormat('HH:mm').format(DateTime(0,1,1,time.hour, time.minute));
-
-                  return ChoiceChip(
-                    label: Text(formattedTime),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      final newTimeSlot = selected ? time : null;
-                      setState(() {
-                        _selectedTimeSlot = newTimeSlot; 
-                      });
-                      widget.onTimeSlotSelected(_selectedDate, newTimeSlot);
-                    },
-                    selectedColor: AppTheme.primaryColor,
-                    labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : AppTheme.textColor,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
-                    backgroundColor: Colors.grey[100],
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        side: BorderSide(
-                            color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300)),
-                    showCheckmark: false, 
-                  );
-                }).toList(),
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: DateUtils.isSameDay(_selectedDate, DateTime.now()) 
+                    ? null 
+                    : () { setState(() { _selectedDate = _selectedDate.subtract(const Duration(days: 1)); _selectedTimeSlot = null; }); widget.onTimeSlotSelected(_selectedDate, null); },
               ),
-              const SizedBox(height: 80), 
+              Text(DateFormat('EEEE, dd/MM', 'pt_BR').format(_selectedDate).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () { setState(() { _selectedDate = _selectedDate.add(const Duration(days: 1)); _selectedTimeSlot = null; }); widget.onTimeSlotSelected(_selectedDate, null); },
+              ),
             ],
           ),
+        ),
+        const SizedBox(height: 24),
+
+        // Lista de Horários
+        if (isClosed)
+          const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('Fechado neste dia.', style: TextStyle(color: Colors.grey))))
+        else if (timeSlots.isEmpty)
+          const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('Sem horários disponíveis hoje.', style: TextStyle(color: Colors.grey))))
+        else ...[
+          Text('Horários (R\$ ${price.toStringAsFixed(2)} / h)', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10, runSpacing: 10,
+            children: timeSlots.map((time) {
+              final isSelected = _selectedTimeSlot == time;
+              return ChoiceChip(
+                label: Text(time.format(context), style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                selected: isSelected,
+                selectedColor: AppTheme.primaryColor,
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: isSelected ? Colors.transparent : Colors.grey[300]!)),
+                onSelected: (sel) {
+                  setState(() => _selectedTimeSlot = sel ? time : null);
+                  widget.onTimeSlotSelected(_selectedDate, _selectedTimeSlot);
+                },
+              );
+            }).toList(),
+          ),
+        ],
+        const SizedBox(height: 80),
       ],
     );
   }

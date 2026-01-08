@@ -1,7 +1,7 @@
 // lib/features/home/presentation/pages/booking_page.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Import para copiar para clipboard
+import 'package:flutter/services.dart'; 
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
@@ -14,7 +14,7 @@ class BookingPage extends StatefulWidget {
   final String courtName;
   final DateTime selectedDate;
   final TimeOfDay selectedTimeSlot;
-  final String? ownerPixKey; // 1. Recebe a chave PIX
+  final String? ownerPixKey;
 
   const BookingPage({
     super.key,
@@ -22,7 +22,7 @@ class BookingPage extends StatefulWidget {
     required this.courtName,
     required this.selectedDate,
     required this.selectedTimeSlot,
-    this.ownerPixKey, // 2. Adiciona ao construtor
+    this.ownerPixKey,
   });
 
   @override
@@ -36,8 +36,6 @@ class _BookingPageState extends State<BookingPage> {
   @override
   void initState() {
     super.initState();
-    // 3. Removemos o _fetchPrice(), pois já temos o preço na CourtDetailsPage
-    //    Mas deixamos a função caso queira reutilizar
     _fetchPrice(); 
   }
 
@@ -54,16 +52,10 @@ class _BookingPageState extends State<BookingPage> {
           setState(() {
             _price = (dayAvailability['pricePerHour'] as num?)?.toDouble();
           });
-        } else {
-          print("Aviso: Não foi possível encontrar preço para o dia $dayKey.");
         }
-      } else {
-        print("Aviso: Falha ao buscar preço (${response.statusCode})");
-      }
-
+      } 
     } catch (e) {
-      print("Erro ao buscar preço: $e");
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao buscar preço da reserva.'), backgroundColor: Colors.orange));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao buscar preço.'), backgroundColor: Colors.redAccent));
     } finally {
       if(mounted) setState(() => _isLoading = false);
     }
@@ -81,7 +73,6 @@ class _BookingPageState extends State<BookingPage> {
       default: return '';
     }
   }
-
 
   Future<void> _confirmBooking() async {
     setState(() => _isLoading = true);
@@ -118,10 +109,10 @@ class _BookingPageState extends State<BookingPage> {
       );
 
         if (response.statusCode == 201 && mounted) {
-        // 4. Texto do SnackBar atualizado
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reserva solicitada! Pague o PIX e aguarde a confirmação do dono.'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Reserva solicitada! Aguarde a confirmação.'), backgroundColor: Colors.green),
         );
+        // Volta duas telas (para a home ou lista)
         int count = 0;
         Navigator.of(context).popUntil((_) => count++ >= 2);
 
@@ -133,7 +124,7 @@ class _BookingPageState extends State<BookingPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.redAccent),
         );
       }
     } finally {
@@ -141,127 +132,162 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final formattedDate = DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR').format(widget.selectedDate);
     final formattedStartTime = widget.selectedTimeSlot.format(context);
     final formattedEndTime = TimeOfDay(hour: widget.selectedTimeSlot.hour + 1, minute: widget.selectedTimeSlot.minute).format(context);
-    final priceString = _price == null ? 'Buscando...' : 'R\$ ${_price!.toStringAsFixed(2).replaceAll('.', ',')}';
+    final priceString = _price == null ? '...' : 'R\$ ${_price!.toStringAsFixed(2).replaceAll('.', ',')}';
     
-    // 5. Verifica se a chave PIX existe
     final bool hasPixKey = widget.ownerPixKey != null && widget.ownerPixKey!.isNotEmpty;
 
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Confirmar Reserva'),
+        title: const Text('Confirmar Reserva', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: const BackButton(color: Colors.black87),
       ),
-      body: Padding(
+      body: SingleChildScrollView( // Adicionado para telas pequenas
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 6. NOVO CARD DE INSTRUÇÕES DE PAGAMENTO (RF10)
+            
+            // 1. CARD DE RESUMO DA RESERVA
+            const Text('Resumo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              child: Column(
+                children: [
+                  _buildSummaryRow(Icons.store_mall_directory, 'Quadra', widget.courtName, isBold: true),
+                  const Divider(height: 32),
+                  _buildSummaryRow(Icons.calendar_today, 'Data', formattedDate),
+                  const SizedBox(height: 16),
+                  _buildSummaryRow(Icons.access_time, 'Horário', '$formattedStartTime - $formattedEndTime'),
+                  const Divider(height: 32),
+                  _buildSummaryRow(Icons.attach_money, 'Total', priceString, color: Colors.green[700], isBold: true),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+
+            // 2. CARD DE PAGAMENTO (PIX)
             if (hasPixKey) ...[
-              Card(
-                color: AppTheme.primaryColor.withOpacity(0.05),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: AppTheme.primaryColor)
+              const Text('Pagamento', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.08), // Fundo verde bem clarinho
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Instruções de Pagamento', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
-                      const SizedBox(height: 12),
-                      const Text('Para confirmar sua reserva, faça um PIX para a chave abaixo e clique em "Solicitar Confirmação".', style: TextStyle(height: 1.4)),
-                      const SizedBox(height: 16),
-                      Text('Chave PIX do Dono:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700])),
-                      const SizedBox(height: 4),
-                      // Campo da Chave PIX com botão de copiar
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.pix, color: AppTheme.primaryColor),
+                        SizedBox(width: 8),
+                        Text('Pagamento via PIX', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 16)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Faça a transferência para a chave abaixo e aguarde a confirmação do dono.', 
+                        style: TextStyle(color: Colors.black87, height: 1.4)),
+                    const SizedBox(height: 16),
+                    
+                    // Chave PIX Copiável
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: widget.ownerPixKey!));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Chave PIX copiada para a área de transferência!'), backgroundColor: Colors.green),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[300]!),
                         ),
                         child: Row(
                           children: [
                             Expanded(
                               child: Text(
                                 widget.ownerPixKey!, 
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.grey[800]),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.copy, size: 20),
-                              onPressed: () {
-                                Clipboard.setData(ClipboardData(text: widget.ownerPixKey!));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Chave PIX copiada!')),
-                                );
-                              },
-                            )
+                            const SizedBox(width: 8),
+                            const Icon(Icons.copy, size: 20, color: AppTheme.primaryColor),
                           ],
                         ),
-                      )
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-
-            Text('Resumo da sua Reserva:', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16), // Diminuído
-            Card(
-              elevation: 2, 
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    _buildInfoRow(Icons.store_outlined, 'Quadra', widget.courtName),
-                    const Divider(height: 24, thickness: 1),
-                    _buildInfoRow(Icons.calendar_today_outlined, 'Data', formattedDate),
-                    const Divider(height: 24, thickness: 1),
-                     _buildInfoRow(Icons.access_time_outlined, 'Horário', '$formattedStartTime - $formattedEndTime'),
-                    const Divider(height: 24, thickness: 1),
-                    _buildInfoRow(Icons.monetization_on_outlined, 'Valor (1 hora)', priceString),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Center(child: Text('Toque para copiar', style: TextStyle(fontSize: 12, color: Colors.grey))),
                   ],
                 ),
               ),
+              const SizedBox(height: 32),
+            ],
+
+            // 3. BOTÃO DE CONFIRMAÇÃO
+            SizedBox(
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _confirmBooking,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: _isLoading
+                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                  : const Text('SOLICITAR CONFIRMAÇÃO', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ),
             ),
-             const Spacer(),
-             ElevatedButton(
-              onPressed: _isLoading ? null : _confirmBooking,
-              child: _isLoading
-                ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                // 7. Texto do botão atualizado
-                : const Text('SOLICITAR CONFIRMAÇÃO'),
-            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String title, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          Icon(icon, color: AppTheme.hintColor, size: 20),
-          const SizedBox(width: 16),
-          Text(title, style: const TextStyle(color: AppTheme.hintColor)),
-          const Spacer(),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        ],
-      ),
+  Widget _buildSummaryRow(IconData icon, String label, String value, {Color? color, bool isBold = false}) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: Colors.grey[600], size: 20),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+            Text(value, style: TextStyle(
+                color: color ?? AppTheme.textColor, 
+                fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                fontSize: 16)),
+          ],
+        )
+      ],
     );
   }
 }

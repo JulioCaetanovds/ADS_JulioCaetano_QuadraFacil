@@ -9,55 +9,41 @@ export const openMatch = async (req: Request, res: Response) => {
     const userId = req.currentUser?.uid; 
     const { bookingId, vagasAbertas } = req.body;
 
-    if (!userId) {
-      return res.status(403).json({ message: 'Acesso negado.' });
-    }
-    if (!bookingId || !vagasAbertas) {
-      return res.status(400).json({ message: 'bookingId e vagasAbertas são obrigatórios.' });
-    }
+    if (!userId) return res.status(403).json({ message: 'Acesso negado.' });
+    if (!bookingId || !vagasAbertas) return res.status(400).json({ message: 'Dados incompletos.' });
 
     const bookingRef = db.collection('reservas').doc(bookingId);
     const bookingDoc = await bookingRef.get();
 
-    if (!bookingDoc.exists) {
-      return res.status(404).json({ message: 'Reserva não encontrada.' });
-    }
-    const bookingData = bookingDoc.data();
-    if (!bookingData) {
-      return res.status(404).json({ message: 'Dados da reserva não encontrados.' });
-    }
+    if (!bookingDoc.exists) return res.status(404).json({ message: 'Reserva não encontrada.' });
+    
+    const bookingData = bookingDoc.data()!;
 
-    if (bookingData.userId !== userId) {
-      return res.status(403).json({ message: 'Você não é o dono desta reserva.' });
-    }
-    if (bookingData.status !== 'confirmada') {
-      return res.status(400).json({ message: 'Apenas reservas "confirmadas" podem ser abertas.' });
-    }
-    if (bookingData.partidaAbertaId) {
-      return res.status(400).json({ message: 'Esta reserva já foi aberta como uma partida.' });
-    }
+    if (bookingData.userId !== userId) return res.status(403).json({ message: 'Você não é o dono desta reserva.' });
+    if (bookingData.status !== 'confirmada') return res.status(400).json({ message: 'Apenas reservas confirmadas podem ser abertas.' });
+    if (bookingData.partidaAbertaId) return res.status(400).json({ message: 'Esta reserva já virou partida.' });
+    
     const startTime = bookingData.startTime.toDate();
-    if (startTime < new Date()) {
-      return res.status(400).json({ message: 'Não é possível abrir uma partida para uma reserva que já ocorreu.' });
-    }
+    if (startTime < new Date()) return res.status(400).json({ message: 'Reserva já expirada.' });
 
+    // --- CRIAÇÃO DA PARTIDA ---
     const newMatchData = {
       reservaId: bookingId,
       organizadorId: userId,
-      quadraId: bookingData.courtId, // Correção que fizemos
+      quadraId: bookingData.courtId || bookingData.quadraId, 
       startTime: bookingData.startTime, 
       endTime: bookingData.endTime,     
       vagasDisponiveis: Number(vagasAbertas),
       participantesIds: [userId], 
       status: 'aberta',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      // CORREÇÃO 1: Copiamos o preço da reserva para a partida
+      priceTotal: bookingData.priceTotal ?? 0.0, 
     };
 
     const newMatchRef = await db.collection('partidasAbertas').add(newMatchData);
 
-    await bookingRef.update({
-      partidaAbertaId: newMatchRef.id
-    });
+    await bookingRef.update({ partidaAbertaId: newMatchRef.id });
 
     return res.status(201).json({
       message: 'Partida aberta com sucesso!',
@@ -67,37 +53,33 @@ export const openMatch = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Erro ao abrir partida:', error);
-    return res.status(500).json({ message: 'Erro interno ao abrir partida.' });
+    return res.status(500).json({ message: 'Erro interno.' });
   }
 };
 
 export const getPublicMatches = async (req: Request, res: Response) => {
   try {
     const now = admin.firestore.Timestamp.now();
-    
-    // 1. Captura os filtros da URL (Query Params)
-    // Ex: /matches/public?esporte=Futsal&busca=Arena
     const { esporte, busca } = req.query; 
 
-    // 2. Busca TODAS as partidas abertas futuras (Filtro grosso no Banco)
     const matchesSnapshot = await db.collection('partidasAbertas')
       .where('status', '==', 'aberta')
       .where('startTime', '>', now)
       .orderBy('startTime', 'asc')
       .get();
 
-    if (matchesSnapshot.empty) {
-      return res.status(200).json([]);
-    }
+    if (matchesSnapshot.empty) return res.status(200).json([]);
 
-    // 3. Cruzamento de dados (Enrichment) - Busca dados da Quadra
     const matchesPromises = matchesSnapshot.docs.map(async (doc) => {
       const matchData = doc.data();
       const quadraId = matchData.quadraId;
 
       let quadraNome = 'Quadra N/D';
       let quadraEndereco = 'Endereço N/D';
-      let esporteQuadra = 'Esporte N/D'; // Variável local para filtrar depois
+      let esporteQuadra = 'Esporte N/D';
+
+      // CORREÇÃO 2: Fallback visual para preço na listagem se não tiver salvo
+      let priceTotal = matchData.priceTotal;
 
       try {
         if (quadraId) {
@@ -109,125 +91,112 @@ export const getPublicMatches = async (req: Request, res: Response) => {
               esporteQuadra = cData.esporte ?? esporteQuadra;
             }
         }
-      } catch (e) {
-        console.error(`Erro ao buscar quadra ${quadraId}:`, e);
-      }
+        // Se a partida antiga não tem preço, tenta buscar na reserva (esforço extra)
+        if (priceTotal === undefined && matchData.reservaId) {
+             const bDoc = await db.collection('reservas').doc(matchData.reservaId).get();
+             if (bDoc.exists) priceTotal = bDoc.data()?.priceTotal;
+        }
+      } catch (e) { console.error(e); }
 
       return {
         id: doc.id,
         ...matchData,
+        priceTotal: priceTotal ?? 0.0, // Envia garantido
         quadraNome: quadraNome,
         quadraEndereco: quadraEndereco,
-        esporte: esporteQuadra, // Importante retornar isso pro front saber
+        esporte: esporteQuadra,
       };
     });
 
     const enrichedMatchesList = await Promise.all(matchesPromises);
 
-    // 4. APLICAÇÃO DOS FILTROS (Na memória do servidor) 🧠
-    let resultadoFiltrado = enrichedMatchesList;
-
-    // A. Filtro por Esporte (Exato)
-    if (esporte && typeof esporte === 'string' && esporte.trim() !== '') {
-        resultadoFiltrado = resultadoFiltrado.filter(match => 
-            match.esporte?.toLowerCase() === esporte.toLowerCase()
-        );
+    // Filtros em memória
+    let resultado = enrichedMatchesList;
+    if (esporte && typeof esporte === 'string') {
+        resultado = resultado.filter(m => m.esporte?.toLowerCase() === esporte.toLowerCase());
+    }
+    if (busca && typeof busca === 'string') {
+        const t = busca.toLowerCase();
+        resultado = resultado.filter(m => m.quadraNome.toLowerCase().includes(t) || m.quadraEndereco.toLowerCase().includes(t));
     }
 
-    // B. Filtro por Busca Geral (Nome da Quadra ou Endereço)
-    if (busca && typeof busca === 'string' && busca.trim() !== '') {
-        const termo = busca.toLowerCase();
-        resultadoFiltrado = resultadoFiltrado.filter(match => 
-            match.quadraNome.toLowerCase().includes(termo) ||
-            match.quadraEndereco.toLowerCase().includes(termo)
-        );
-    }
-
-    return res.status(200).json(resultadoFiltrado);
+    return res.status(200).json(resultado);
 
   } catch (error) {
-    console.error('Erro ao buscar partidas públicas:', error);
-    return res.status(500).json({ message: 'Erro interno ao buscar partidas.' });
+    console.error('Erro ao listar:', error);
+    return res.status(500).json({ message: 'Erro interno.' });
   }
 };
 
-// GET /matches/:matchId
 export const getMatchDetails = async (req: Request, res: Response) => {
   try {
     const { matchId } = req.params;
-    if (!matchId) {
-      return res.status(400).json({ message: 'ID da partida é obrigatório.' });
-    }
+    if (!matchId) return res.status(400).json({ message: 'ID obrigatório.' });
 
     const matchRef = db.collection('partidasAbertas').doc(matchId);
     const matchDoc = await matchRef.get();
 
-    if (!matchDoc.exists) {
-      return res.status(404).json({ message: 'Partida não encontrada.' });
-    }
+    if (!matchDoc.exists) return res.status(404).json({ message: 'Partida não encontrada.' });
 
     const matchData = matchDoc.data()!;
+    
+    // CORREÇÃO 3: Lógica de Resgate de Preço (Salva vidas de partidas antigas)
+    if (matchData.priceTotal === undefined || matchData.priceTotal === null) {
+        console.log("⚠️ Partida sem preço, buscando na reserva original...");
+        try {
+            const bDoc = await db.collection('reservas').doc(matchData.reservaId).get();
+            if (bDoc.exists) {
+                matchData.priceTotal = bDoc.data()?.priceTotal;
+                // Opcional: Salvar de volta na partida pra não buscar de novo
+                await matchRef.update({ priceTotal: matchData.priceTotal });
+            }
+        } catch(e) { console.error("Erro no fallback de preço", e); }
+    }
+
     const quadraId = matchData.quadraId;
     const organizadorId = matchData.organizadorId;
     const participantesIds: string[] = matchData.participantesIds || [];
-    const participantesPendentesIds: string[] = matchData.participantesPendentes || []; // [!code focus]
+    const participantesPendentesIds: string[] = matchData.participantesPendentes || [];
 
     let quadraData = {};
-    let organizadorData: { nome: string; fotoUrl: string | null } = {
-      nome: 'Organizador N/D',
-      fotoUrl: null
-    };
+    let organizadorData = { nome: 'Organizador N/D', fotoUrl: null };
 
-    try {
-      const courtDoc = await db.collection('quadras').doc(quadraId).get();
-      if (courtDoc.exists) {
-        quadraData = courtDoc.data() ?? {};
-      }
-    } catch (e) { console.error("Erro ao buscar quadra:", e); }
+    // Buscas paralelas para ser rápido
+    const [courtDoc, userRecord] = await Promise.all([
+        db.collection('quadras').doc(quadraId).get().catch(() => null),
+        admin.auth().getUser(organizadorId).catch(() => null)
+    ]);
 
-    try {
-      const userRecord = await admin.auth().getUser(organizadorId);
-      organizadorData = {
-        nome: userRecord.displayName ?? userRecord.email ?? 'Organizador',
-        fotoUrl: userRecord.photoURL ?? null
-      };
-    } catch (e) { console.error("Erro ao buscar organizador:", e); }
+    if (courtDoc && courtDoc.exists) quadraData = courtDoc.data() ?? {};
+    if (userRecord) {
+        organizadorData = {
+            nome: (userRecord as any).displayName ?? (userRecord as any).email ?? 'Organizador',
+            fotoUrl: (userRecord as any).photoURL ?? null
+        };
+    }
 
+    // Função auxiliar para buscar dados de usuários
     const fetchUsersData = async (ids: string[]) => {
       return Promise.all(ids.map(async (id) => {
         try {
-          if (id === organizadorId) {
-            return { id, ...organizadorData };
-          }
-          const userRecord = await admin.auth().getUser(id);
+          if (id === organizadorId) return { id, ...organizadorData };
+          const u = await admin.auth().getUser(id);
           return {
             id: id,
-            nome: userRecord.displayName ?? userRecord.email ?? 'Usuário',
-            fotoUrl: userRecord.photoURL ?? null
+            nome: u.displayName ?? u.email ?? 'Usuário',
+            fotoUrl: u.photoURL ?? null
           };
-        } catch (e) {
-          return { id: id, nome: 'Usuário Desconhecido', fotoUrl: null };
-        }
+        } catch (e) { return { id: id, nome: 'Usuário', fotoUrl: null }; }
       }));
     };
 
     const participantesData = await fetchUsersData(participantesIds);
-    const pendentesData = await fetchUsersData(participantesPendentesIds); // [!code focus]
-
-    // ----------------------------------------------------
-    // ** DEBUG 1: VERIFICAÇÃO DE DADOS CRÍTICOS **
-    // ----------------------------------------------------
-    console.log("--- DEBUG 1: API BACKEND START ---");
-    console.log("Organizador ID:", organizadorId);
-    console.log("Qtd. Participantes Confirmados:", participantesData.length);
-    console.log("Qtd. Solicitantes Pendentes:", pendentesData.length); // [!code focus]
-    console.log("Dados dos Pendentes:", pendentesData.map(p => p.nome)); // [!code focus]
-    console.log("--- DEBUG 1: API BACKEND END ---");
-    // ----------------------------------------------------
+    const pendentesData = await fetchUsersData(participantesPendentesIds);
 
     const responseData = {
       id: matchDoc.id,
       ...matchData,
+      priceTotal: matchData.priceTotal ?? 0.0, // Garante que vai no JSON
       quadraData: quadraData,
       organizadorData: organizadorData,
       participantesData: participantesData,
@@ -237,8 +206,8 @@ export const getMatchDetails = async (req: Request, res: Response) => {
     return res.status(200).json(responseData);
 
   } catch (error) {
-    console.error('Erro ao buscar detalhes da partida:', error);
-    return res.status(500).json({ message: 'Erro interno ao buscar detalhes.' });
+    console.error('Erro detalhe partida:', error);
+    return res.status(500).json({ message: 'Erro interno.' });
   }
 };
 

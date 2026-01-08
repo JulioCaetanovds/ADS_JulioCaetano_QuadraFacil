@@ -29,8 +29,6 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
     _currentStatus = widget.booking['status'] ?? 'N/A';
   }
 
-  // --- Lógica do Chat com o Cliente (RF11) ---
-  // CORRIGIDO: Agora usa a rota de Booking para falar com o cliente específico
   Future<void> _handleClientChat() async {
     if (_isAccessingChat) return;
     setState(() => _isAccessingChat = true);
@@ -40,10 +38,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
         if (user == null) throw Exception('Dono não autenticado.');
         final idToken = await user.getIdToken(true);
         
-        // 1. Pega o ID da RESERVA (e não da partida)
         final bookingId = widget.booking['id']; 
-
-        // 2. Chama a API correta: /chats/booking/ID
         final url = Uri.parse('${AppConfig.apiUrl}/chats/booking/$bookingId'); 
         
         final response = await http.post(
@@ -57,12 +52,9 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
         if (response.statusCode == 200 || response.statusCode == 201) {
             final responseData = jsonDecode(response.body);
             final chatId = responseData['chatId'];
-            
-            // Título do Chat: Nome do Cliente
             final chatTitle = widget.booking['userName'] ?? widget.booking['clienteNome'] ?? 'Cliente';
 
             if (mounted) {
-                 // NAVEGAÇÃO PARA A TELA DE CHAT
                  Navigator.of(context).push(MaterialPageRoute(
                     builder: (context) => ChatDetailPage(chatId: chatId, title: chatTitle)
                  ));
@@ -82,7 +74,6 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
         if (mounted) setState(() => _isAccessingChat = false);
     }
   }
-  // --- Fim Lógica do Chat ---
 
   Future<void> _updateBookingStatus(String action) async {
     if (_isLoading) return;
@@ -107,9 +98,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
           _currentStatus = newStatus;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Reserva $newStatus com sucesso!'),
-              backgroundColor: Colors.green),
+          SnackBar(content: Text('Reserva $newStatus com sucesso!'), backgroundColor: Colors.green),
         );
       } else {
         final error = jsonDecode(response.body);
@@ -118,29 +107,24 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red),
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   String _formatBookingTimestamp(dynamic timestamp) {
     DateTime? startTime;
     if (timestamp is Map && timestamp['_seconds'] != null) {
-      startTime =
-          DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
+      startTime = DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
     } else if (timestamp is String) {
       startTime = DateTime.tryParse(timestamp);
     }
 
     if (startTime != null) {
-      return DateFormat('dd/MM/yy (EEEE) • HH:mm', 'pt_BR').format(startTime);
+      return DateFormat('dd/MM/yy • HH:mm', 'pt_BR').format(startTime);
     }
     return 'N/A';
   }
@@ -150,6 +134,23 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
     Navigator.of(context).pop(statusHasChanged);
   }
 
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmada': return Colors.green[700]!;
+      case 'pendente': return Colors.orange[800]!;
+      case 'cancelada': return Colors.red[700]!;
+      default: return Colors.grey;
+    }
+  }
+
+  Color _getStatusBgColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmada': return Colors.green[50]!;
+      case 'pendente': return Colors.orange[50]!;
+      case 'cancelada': return Colors.red[50]!;
+      default: return Colors.grey[100]!;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -160,97 +161,102 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
         ? 'R\$ ${widget.booking['priceTotal'].toStringAsFixed(2).replaceAll('.', ',')}'
         : 'Valor N/D';
     final isConfirmed = _currentStatus.toLowerCase() == 'confirmada';
+    final statusColor = _getStatusColor(_currentStatus);
+    final statusBg = _getStatusBgColor(_currentStatus);
 
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Detalhes da Reserva'),
+        title: const Text('Detalhes da Reserva', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
           onPressed: _popWithResult, 
         ),
       ),
       body: PopScope( 
          canPop: false,
          onPopInvoked: (didPop) {
-           if (!didPop) { 
-             _popWithResult();
-           }
+           if (!didPop) _popWithResult();
          },
         child: ListView(
           padding: const EdgeInsets.all(24.0),
           children: [
-            _buildDetailRow(
-                icon: Icons.person_outline,
-                title: 'Cliente',
-                value: clienteNome),
-            _buildDetailRow(
-                icon: Icons.sports_soccer, title: 'Quadra', value: quadraNome),
-            _buildDetailRow(
-                icon: Icons.access_time, title: 'Horário', value: horario),
-            _buildDetailRow(
-                icon: Icons.monetization_on_outlined, title: 'Valor', value: preco), 
-            _buildDetailRow(
-                icon: Icons.info_outline,
-                title: 'Status Atual',
-                value: _currentStatus.toUpperCase()),
+            // 1. Card Principal com Status
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(20)),
+                    child: Text(_currentStatus.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(clienteNome, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
+                  const SizedBox(height: 4),
+                  Text('Cliente', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                  const Divider(height: 32),
+                  _buildDetailRow(icon: Icons.sports_soccer, title: 'Quadra', value: quadraNome),
+                  _buildDetailRow(icon: Icons.access_time, title: 'Horário', value: horario),
+                  _buildDetailRow(icon: Icons.monetization_on_outlined, title: 'Valor', value: preco, isBold: true, color: Colors.green[700]),
+                ],
+              ),
+            ),
+            
             const SizedBox(height: 32),
             
-            // 4. Botão de Chat (Aparece se a reserva estiver CONFIRMADA)
-            if (isConfirmed) ...[
-                  ElevatedButton.icon(
-                    onPressed: _isAccessingChat ? null : _handleClientChat, 
-                    icon: _isAccessingChat
-                        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.chat_bubble_outline),
-                    label: const Text('CHAT COM O CLIENTE'),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor),
-                ),
-                const SizedBox(height: 32),
-            ],
+            // 2. Botão de Chat
+            if (isConfirmed) 
+               ElevatedButton.icon(
+                  onPressed: _isAccessingChat ? null : _handleClientChat, 
+                  icon: _isAccessingChat
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.chat_bubble_outline),
+                  label: const Text('FALAR COM O CLIENTE'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accentColor,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                  ),
+              ),
 
-            const Divider(),
-            const SizedBox(height: 16),
-            const Text(
-              'Alterar Status',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textColor),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 32),
             
+            // 3. Ações de Gestão
             if (_isLoading) ...[
               const Center(child: CircularProgressIndicator()),
             ] else if (_currentStatus.toLowerCase() == 'pendente') ...[
-              ElevatedButton.icon(
-                onPressed: () => _updateBookingStatus('confirm'),
-                icon: const Icon(Icons.check_circle_outline),
-                label: const Text('Confirmar Pagamento/Reserva'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              ),
+              const Text('Ações Pendentes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _updateBookingStatus('reject'),
-                icon: const Icon(Icons.cancel_outlined),
-                label: const Text('Recusar Reserva'),
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red)),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _updateBookingStatus('confirm'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      child: const Text('CONFIRMAR', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _updateBookingStatus('reject'),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      child: const Text('RECUSAR', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ),
             ] else if (_currentStatus.toLowerCase() == 'confirmada') ...[
               OutlinedButton.icon(
                 onPressed: () => _updateBookingStatus('reject'),
                 icon: const Icon(Icons.cancel_outlined),
                 label: const Text('Cancelar Reserva (Reembolsar)'),
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red)),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               ),
-            ] else ... [
-              const Text('Esta reserva não pode mais ser alterada.', 
-                style: TextStyle(color: AppTheme.hintColor),
-                textAlign: TextAlign.center,
-              )
             ]
           ],
         ),
@@ -258,24 +264,19 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
     );
   }
 
-  Widget _buildDetailRow(
-      {required IconData icon, required String title, required String value}) {
+  Widget _buildDetailRow({required IconData icon, required String title, required String value, bool isBold = false, Color? color}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppTheme.primaryColor, size: 24),
+          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: Colors.grey[600], size: 20)),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: AppTheme.hintColor)),
-                const SizedBox(height: 4),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(title, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                Text(value, style: TextStyle(fontSize: 16, fontWeight: isBold ? FontWeight.bold : FontWeight.w500, color: color ?? AppTheme.textColor)),
               ],
             ),
           ),

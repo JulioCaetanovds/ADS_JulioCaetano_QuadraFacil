@@ -60,12 +60,12 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
           });
         }
       } else {
-        throw Exception('Falha ao carregar detalhes da partida: ${response.body}');
+        throw Exception('Falha ao carregar partida.');
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _errorMessage = 'Erro de conexão.';
           _isLoading = false;
         });
       }
@@ -84,8 +84,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     _isCurrentUserPending = pendentes.any((p) => p['id'] == _currentUserId);
   }
 
-
-  // --- Lógica do Organizador ACEITAR/RECUSAR ---
   Future<void> _handleRequest(String userId, bool approve) async {
     if (_isProcessingRequest) return;
     setState(() => _isProcessingRequest = true);
@@ -118,84 +116,38 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
         );
         _fetchMatchDetails(); 
       } else {
-        final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Falha ao processar solicitação.');
+        throw Exception('Erro na solicitação.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao processar.'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isProcessingRequest = false);
     }
   }
 
-  // --- Lógica para Entrar (Solicitar) ---
   Future<void> _joinMatch() async {
     if (_isJoining || _currentUserId == null) return;
     setState(() => _isJoining = true);
     
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('Usuário não autenticado.');
-      final idToken = await user.getIdToken(true);
-
+      final idToken = await user!.getIdToken(true);
       final url = Uri.parse('${AppConfig.apiUrl}/matches/${widget.matchId}/join');
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken',
-        },
-      );
+      final response = await http.post(url, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $idToken'});
 
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Solicitação enviada! Aguarde a aprovação.'), backgroundColor: Colors.green),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Solicitação enviada!'), backgroundColor: Colors.green));
         _fetchMatchDetails(); 
       } else {
-        final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Falha ao solicitar entrada.');
+        throw Exception('Erro ao entrar.');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
-        );
-      }
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao solicitar entrada.'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isJoining = false);
     }
-  }
-
-  // --- Lógica para Sair ---
-  Future<void> _showLeaveConfirmationDialog() async {
-    if (_isLeaving) return;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sair da Partida?'),
-        content: const Text('Tem certeza que deseja sair?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Voltar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              _performLeaveMatch(); 
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Sim, Sair'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _performLeaveMatch() async {
@@ -204,53 +156,30 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('Usuário não autenticado.');
-      final idToken = await user.getIdToken(true);
-
+      final idToken = await user!.getIdToken(true);
       final url = Uri.parse('${AppConfig.apiUrl}/matches/${widget.matchId}/leave');
-      final response = await http.delete(
-        url,
-        headers: {'Authorization': 'Bearer $idToken'},
-      );
+      final response = await http.delete(url, headers: {'Authorization': 'Bearer $idToken'});
 
       if (response.statusCode == 200 && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Você saiu da partida.'), backgroundColor: Colors.blue),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Você saiu da partida.'), backgroundColor: Colors.blue));
         _fetchMatchDetails(); 
-      } else {
-        final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Falha ao sair da partida.');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
-        );
-      }
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao sair.'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLeaving = false);
     }
   }
 
-  // --- Lógica do Chat (RF11) ---
   Future<void> _handleMatchChat() async {
     if (_isProcessingRequest) return;
     setState(() => _isProcessingRequest = true);
 
     try {
         final user = FirebaseAuth.instance.currentUser;
-        if (user == null) throw Exception('Usuário não autenticado.');
-        final idToken = await user.getIdToken(true);
-
+        final idToken = await user!.getIdToken(true);
         final url = Uri.parse('${AppConfig.apiUrl}/chats/match/${widget.matchId}');
-        final response = await http.post(
-            url,
-            headers: {
-                'Authorization': 'Bearer $idToken',
-                'Content-Type': 'application/json',
-            },
-        );
+        final response = await http.post(url, headers: {'Authorization': 'Bearer $idToken', 'Content-Type': 'application/json'});
 
         if (response.statusCode == 200 || response.statusCode == 201) {
             final responseData = jsonDecode(response.body);
@@ -258,66 +187,36 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
             final chatTitle = _matchData!['quadraData']?['nome'] ?? 'Chat da Partida';
 
             if (mounted) {
-                 ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Chat pronto! Abrindo conversa...')),
-                );
-                // 2. NAVEGAÇÃO PARA A TELA DE CHAT
                 Navigator.of(context).push(MaterialPageRoute(
                     builder: (context) => ChatDetailPage(chatId: chatId, title: chatTitle)
                 ));
             }
-        } else {
-            final error = jsonDecode(response.body);
-            throw Exception(error['message'] ?? 'Falha ao iniciar o chat de grupo.');
         }
-
     } catch (e) {
-        if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
-            );
-        }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao abrir chat.'), backgroundColor: Colors.red));
     } finally {
         if (mounted) setState(() => _isProcessingRequest = false);
     }
 }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Detalhes da Partida'),
+        title: const Text('Detalhes da Partida', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: const BackButton(color: Colors.black87),
       ),
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _fetchMatchDetails,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Tentar Novamente'),
-            )
-          ],
-        ),
-      );
-    }
-
-    if (_matchData == null) {
-      return const Center(child: Text('Partida não encontrada.'));
-    }
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_errorMessage != null) return Center(child: Text(_errorMessage!));
+    if (_matchData == null) return const Center(child: Text('Partida não encontrada.'));
 
     final match = _matchData!;
     final quadra = match['quadraData'] ?? {};
@@ -329,8 +228,9 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     final int totalParticipantes = participantes.length;
     final int vagasTotais = totalParticipantes + vagasDisponiveis;
     
-    final num precoTotal = (match['priceTotal'] as num?) ?? 0; 
-    final double precoPorPessoa = (precoTotal > 0 && vagasTotais > 0) ? (precoTotal / vagasTotais) : 0.0;
+    // --- CORREÇÃO AQUI: Pegamos o valor total direto ---
+    // Se o campo 'priceTotal' não existir, usamos 0.0 como fallback
+    final double precoQuadra = (match['priceTotal'] as num?)?.toDouble() ?? 0.0; 
 
     final bool canAccessChat = _isOrganizador || _isCurrentUserParticipant; 
 
@@ -342,78 +242,79 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
             child: ListView(
               padding: const EdgeInsets.all(16.0),
               children: [
-                _buildInfoCard(match, precoPorPessoa),
+                // 1. Card Principal (Agora passa o preço total da quadra)
+                _buildInfoCard(match, precoQuadra),
                 const SizedBox(height: 24),
 
-                // --- SEÇÃO DE SOLICITAÇÕES PENDENTES (Corrigido para usar length) ---
+                // 2. Área de Aprovação (Só para Organizador)
                 if (_isOrganizador && pendentes.isNotEmpty) ...[
                    Container(
-                     padding: const EdgeInsets.all(8),
+                     padding: const EdgeInsets.all(16),
                      decoration: BoxDecoration(
-                       color: Colors.orange.withOpacity(0.1),
-                       borderRadius: BorderRadius.circular(8),
-                       border: Border.all(color: Colors.orange)
+                       color: Colors.orange[50],
+                       borderRadius: BorderRadius.circular(16),
+                       border: Border.all(color: Colors.orange[200]!)
                      ),
                      child: Column(
                        crossAxisAlignment: CrossAxisAlignment.start,
                        children: [
-                         Row(
-                           children: [
-                             const Icon(Icons.notifications_active, color: Colors.orange),
-                             const SizedBox(width: 8),
-                             Text('Solicitações Pendentes (${pendentes.length})', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange)),
-                           ],
-                         ),
-                         const SizedBox(height: 8),
+                         Row(children: [
+                           const Icon(Icons.notifications_active, color: Colors.orange),
+                           const SizedBox(width: 8),
+                           Text('Solicitações (${pendentes.length})', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange[800])),
+                         ]),
+                         const SizedBox(height: 12),
                          _buildRequestsList(pendentes),
                        ],
                      ),
                    ),
                    const SizedBox(height: 24),
                 ],
-                // ----------------------------------------
     
-                Text('Participantes ($totalParticipantes/$vagasTotais)',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                _buildParticipantsList(participantes, organizador['nome']),
+                // 3. Participantes
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Participantes ($totalParticipantes/$vagasTotais)', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
+                    if (canAccessChat)
+                      TextButton.icon(
+                        onPressed: _isProcessingRequest ? null : _handleMatchChat,
+                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        label: const Text('Chat'),
+                      )
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildParticipantsList(participantes),
                 const SizedBox(height: 24),
                 
-                // --- BOTÃO DE CHAT NO MEIO DO CONTEÚDO ---
-                 if (canAccessChat) ...[
-                    ElevatedButton.icon(
-                        onPressed: _isProcessingRequest ? null : _handleMatchChat,
-                        icon: _isProcessingRequest
-                            ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.chat_bubble_outline),
-                        label: const Text('CHAT DA PARTIDA'),
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor),
-                    ),
-                    const SizedBox(height: 24),
-                 ],
-
-                const Text('Localização',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                // 4. Localização
+                const Text('Local', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor)),
                 const SizedBox(height: 8),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.location_on_outlined,
-                      color: AppTheme.primaryColor),
-                  title: Text(quadra['nome'] ?? 'Quadra N/A'),
-                  subtitle: Text(quadra['endereco'] ?? 'Endereço N/A'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () { },
+                Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                  color: Colors.white,
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                      child: const Icon(Icons.location_on, color: AppTheme.primaryColor),
+                    ),
+                    title: Text(quadra['nome'] ?? 'Quadra N/A', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(quadra['endereco'] ?? 'Endereço N/A'),
+                  ),
                 ),
               ],
             ),
           ),
         ),
-        SafeArea(
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: _buildActionButton(vagasDisponiveis),
-          ),
+        
+        // 5. Botão de Ação Fixo no rodapé
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]),
+          child: SafeArea(child: _buildActionButton(vagasDisponiveis)),
         ),
       ],
     );
@@ -421,117 +322,87 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
 
   Widget _buildActionButton(int vagasDisponiveis) {
     if (_isOrganizador) {
-      return ElevatedButton(
-        onPressed: null, 
-        style: ElevatedButton.styleFrom(disabledBackgroundColor: Colors.grey[300]),
-        child: const Text('VOCÊ É O ORGANIZADOR', style: TextStyle(color: Colors.black54)),
-      );
+      return ElevatedButton(onPressed: null, style: ElevatedButton.styleFrom(disabledBackgroundColor: Colors.grey[200]), child: const Text('VOCÊ ORGANIZA ESTA PARTIDA', style: TextStyle(color: Colors.grey)));
     }
-
     if (_isCurrentUserParticipant) {
-      return OutlinedButton.icon(
-        onPressed: _isLeaving ? null : _showLeaveConfirmationDialog, 
-        icon: _isLeaving
-          ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
-          : const Icon(Icons.remove_circle_outline),
-        label: const Text('SAIR DA PARTIDA'),
-        style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+      return OutlinedButton(
+        onPressed: _isLeaving ? null : _performLeaveMatch, 
+        style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 16)),
+        child: _isLeaving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red)) : const Text('SAIR DA PARTIDA', style: TextStyle(fontWeight: FontWeight.bold)),
       );
     }
-    
     if (_isCurrentUserPending) {
-       return const ElevatedButton(
-        onPressed: null, 
-        child: Text('SOLICITAÇÃO ENVIADA (AGUARDANDO APROVAÇÃO)'),
-      );
+       return ElevatedButton(onPressed: null, style: ElevatedButton.styleFrom(disabledBackgroundColor: Colors.orange[100]), child: Text('AGUARDANDO APROVAÇÃO', style: TextStyle(color: Colors.orange[800])));
     }
-    
     if (vagasDisponiveis <= 0) {
-      return const ElevatedButton(
-        onPressed: null, 
-        child: Text('VAGAS ESGOTADAS'),
-      );
+      return const ElevatedButton(onPressed: null, child: Text('VAGAS ESGOTADAS'));
     }
-
-    return ElevatedButton.icon(
+    return ElevatedButton(
       onPressed: _isJoining ? null : _joinMatch, 
-      icon: _isJoining 
-        ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-        : const Icon(Icons.add_task_outlined),
-      label: const Text('SOLICITAR PARTICIPAÇÃO'),
+      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+      child: _isJoining ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('QUERO JOGAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
     );
   }
 
-  Widget _buildInfoCard(Map<String, dynamic> match, double precoPorPessoa) {
-     final String esporte = match['quadraData']?['esporte'] ?? 'N/D';
-     final String data = _formatTimestamp(match['startTime'], 'dd/MM/yy (EEEE)');
-     final String horario = '${_formatTimestamp(match['startTime'], 'HH:mm')} - ${_formatTimestamp(match['endTime'], 'HH:mm')}';
-     final String preco = 'R\$ ${precoPorPessoa.toStringAsFixed(2).replaceAll('.', ',')}';
+  // --- CORREÇÃO AQUI: Recebe 'precoTotal' em vez de 'precoPorPessoa' ---
+  Widget _buildInfoCard(Map<String, dynamic> match, double precoTotal) {
+     final esporte = match['quadraData']?['esporte'] ?? 'N/D';
+     final data = _formatTimestamp(match['startTime'], 'dd/MM (EEE)');
+     final hora = '${_formatTimestamp(match['startTime'], 'HH:mm')} - ${_formatTimestamp(match['endTime'], 'HH:mm')}';
+     // Formata o valor total
+     final String preco = 'R\$ ${precoTotal.toStringAsFixed(2).replaceAll('.', ',')}';
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            _buildInfoRow(Icons.sports_soccer, 'Esporte', esporte),
-            const Divider(height: 24),
-            _buildInfoRow(Icons.calendar_today_outlined, 'Data', data),
-            const Divider(height: 24),
-            _buildInfoRow(Icons.access_time_outlined, 'Horário', horario),
-            const Divider(height: 24),
-            _buildInfoRow(Icons.monetization_on_outlined, 'Valor por pessoa', preco),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildDetailColumn(Icons.sports_soccer, 'Esporte', esporte),
+          Container(height: 40, width: 1, color: Colors.grey[200]),
+          _buildDetailColumn(Icons.calendar_month, data, hora),
+          Container(height: 40, width: 1, color: Colors.grey[200]),
+          // Atualizei o rótulo para 'Valor Total'
+          _buildDetailColumn(Icons.attach_money, 'Valor Total', preco, isBold: true),
+        ],
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String title, String value) {
-    return Row(
+  Widget _buildDetailColumn(IconData icon, String label, String value, {bool isBold = false}) {
+    return Column(
       children: [
-        Icon(icon, color: AppTheme.hintColor, size: 20),
-        const SizedBox(width: 16),
-        Text(title, style: const TextStyle(color: AppTheme.hintColor)),
-        const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Icon(icon, color: AppTheme.primaryColor, size: 24),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(value, style: TextStyle(fontSize: 14, fontWeight: isBold ? FontWeight.bold : FontWeight.w500, color: isBold ? Colors.green[700] : Colors.black87)),
       ],
     );
   }
 
-  Widget _buildParticipantsList(List<dynamic> participants, String organizadorNome) {
-    if (participants.isEmpty) {
-      return const Text('Ainda não há participantes.', style: TextStyle(color: AppTheme.hintColor));
-    }
+  Widget _buildParticipantsList(List<dynamic> participants) {
+    if (participants.isEmpty) return const Text('Seja o primeiro a entrar!', style: TextStyle(color: Colors.grey));
     
     return SizedBox(
-      height: 80,
-      child: ListView.builder(
+      height: 90,
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: participants.length,
+        separatorBuilder: (ctx, i) => const SizedBox(width: 16),
         itemBuilder: (context, index) {
-          final participant = participants[index];
-          final bool isOrganizador = participant['id'] == _matchData!['organizadorId'];
-
-          return SizedBox(
-            width: 70,
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 25,
-                  backgroundColor: isOrganizador ? AppTheme.primaryColor.withOpacity(0.2) : Colors.grey[200],
-                  child: Icon(
-                    isOrganizador ? Icons.star : Icons.person,
-                    color: isOrganizador ? AppTheme.primaryColor : Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  participant['nome'],
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, fontWeight: isOrganizador ? FontWeight.bold : FontWeight.normal),
-                )
-              ],
-            ),
+          final p = participants[index];
+          final bool isOrg = p['id'] == _matchData!['organizadorId'];
+          return Column(
+            children: [
+              Stack(
+                children: [
+                  CircleAvatar(radius: 28, backgroundColor: isOrg ? AppTheme.primaryColor.withOpacity(0.1) : Colors.grey[200], child: Icon(Icons.person, color: isOrg ? AppTheme.primaryColor : Colors.grey)),
+                  if (isOrg) Positioned(bottom: 0, right: 0, child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: const Icon(Icons.star, color: Colors.orange, size: 16))),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SizedBox(width: 60, child: Text(p['nome'], textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11))),
+            ],
           );
         },
       ),
@@ -539,42 +410,23 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
   }
   
   Widget _buildRequestsList(List<dynamic> pendentes) {
-    return ListView.builder(
-      shrinkWrap: true, 
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: pendentes.length,
-      itemBuilder: (context, index) {
-        final user = pendentes[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            leading: CircleAvatar(
-              backgroundColor: Colors.grey[300],
-              child: const Icon(Icons.person, color: Colors.grey),
-            ),
-            title: Text(user['nome']),
-            subtitle: const Text('Quer participar'),
-            trailing: _isProcessingRequest 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.check_circle, color: Colors.green, size: 30),
-                  onPressed: () => _handleRequest(user['id'], true), // Aprovar
-                  tooltip: 'Aceitar',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.cancel, color: Colors.red, size: 30),
-                  onPressed: () => _handleRequest(user['id'], false), // Rejeitar
-                  tooltip: 'Recusar',
-                ),
-              ],
-            ),
+    return Column(
+      children: pendentes.map((user) => Card(
+        elevation: 0, color: Colors.white,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          leading: CircleAvatar(backgroundColor: Colors.grey[100], child: const Icon(Icons.person, color: Colors.grey)),
+          title: Text(user['nome'], style: const TextStyle(fontWeight: FontWeight.bold)),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: () => _handleRequest(user['id'], true)),
+              IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => _handleRequest(user['id'], false)),
+            ],
           ),
-        );
-      },
+        ),
+      )).toList(),
     );
   }
 
@@ -585,10 +437,6 @@ class _MatchDetailsPageState extends State<MatchDetailsPage> {
     } else if (timestamp is String) {
       time = DateTime.tryParse(timestamp);
     }
-
-    if (time != null) {
-      return DateFormat(format, 'pt_BR').format(time);
-    }
-    return 'N/A';
+    return time != null ? DateFormat(format, 'pt_BR').format(time) : 'N/A';
   }
 }

@@ -1,11 +1,12 @@
+// lib/features/home/presentation/pages/add_edit_court_page.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:quadrafacil/core/config.dart'; // Importamos nossa configuração de URL
+import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
 
-// Modelo simples para guardar os dados de disponibilidade de um dia
+// Modelo de Disponibilidade
 class AvailabilityDay {
   TimeOfDay? startTime;
   TimeOfDay? endTime;
@@ -13,23 +14,17 @@ class AvailabilityDay {
   bool isOpen = false;
 
   AvailabilityDay({this.startTime, this.endTime, String? price, this.isOpen = false}) {
-    // Garante que o preço use ponto como separador decimal
     priceController.text = price?.replaceAll(',', '.') ?? '';
   }
 
-  // Limpa os recursos do controller
-  void dispose() {
-    priceController.dispose();
-  }
+  void dispose() => priceController.dispose();
 
-  // Converte para JSON para enviar para a API
   Map<String, dynamic>? toJson() {
     if (!isOpen || startTime == null || endTime == null || priceController.text.isEmpty) {
-      return null; // Retorna null se estiver fechado ou incompleto
+      return null; 
     }
     try {
       String formatTime(TimeOfDay time) => '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-      // Converte vírgula para ponto antes de fazer o parse
       final priceValue = double.tryParse(priceController.text.replaceAll(',', '.')) ?? 0.0;
       return {
         'startTime': formatTime(startTime!),
@@ -37,22 +32,17 @@ class AvailabilityDay {
         'pricePerHour': priceValue,
       };
     } catch (e) {
-      print("Erro ao converter disponibilidade para JSON: $e");
       return null;
     }
   }
 
-  // Cria a partir de JSON vindo da API
   static AvailabilityDay fromJson(Map<String, dynamic>? json) {
-    if (json == null) {
-      return AvailabilityDay(isOpen: false);
-    }
+    if (json == null) return AvailabilityDay(isOpen: false);
     try {
       TimeOfDay parseTime(String timeStr) {
          final parts = timeStr.split(':');
          return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
       }
-      // Formata o preço vindo da API para exibir corretamente
       final priceString = json['pricePerHour']?.toStringAsFixed(2).replaceAll('.', ',') ?? '';
       return AvailabilityDay(
         startTime: parseTime(json['startTime']),
@@ -61,12 +51,10 @@ class AvailabilityDay {
         isOpen: true,
       );
     } catch(e) {
-       print("Erro ao converter JSON para disponibilidade: $e");
        return AvailabilityDay(isOpen: false);
     }
   }
 }
-
 
 class AddEditCourtPage extends StatefulWidget {
   final String? courtId;
@@ -84,12 +72,8 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
   final _rulesController = TextEditingController();
 
   final Map<String, AvailabilityDay> _availability = {
-    'segunda': AvailabilityDay(),
-    'terca': AvailabilityDay(),
-    'quarta': AvailabilityDay(),
-    'quinta': AvailabilityDay(),
-    'sexta': AvailabilityDay(),
-    'sabado': AvailabilityDay(),
+    'segunda': AvailabilityDay(), 'terca': AvailabilityDay(), 'quarta': AvailabilityDay(),
+    'quinta': AvailabilityDay(), 'sexta': AvailabilityDay(), 'sabado': AvailabilityDay(),
     'domingo': AvailabilityDay(),
   };
   final List<String> _daysOfWeek = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
@@ -116,29 +100,24 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
       if (user == null) throw Exception('Usuário não autenticado.');
       final idToken = await user.getIdToken(true);
 
-      // Busca Detalhes da Quadra
       final detailsUrl = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}');
       final detailsResponse = await http.get(detailsUrl, headers: {'Authorization': 'Bearer $idToken'});
-      if (detailsResponse.statusCode != 200) throw Exception('Falha ao carregar detalhes: ${detailsResponse.body}');
+      if (detailsResponse.statusCode != 200) throw Exception('Falha ao carregar detalhes.');
       final courtData = jsonDecode(detailsResponse.body);
 
-      // Busca Disponibilidade
       final availabilityUrl = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}/availability');
-      final availabilityResponse = await http.get(availabilityUrl); // GET de disponibilidade pode ser público
+      final availabilityResponse = await http.get(availabilityUrl);
       Map<String, dynamic> availabilityData = {};
       if (availabilityResponse.statusCode == 200) {
          availabilityData = jsonDecode(availabilityResponse.body);
-      } else {
-         print("Aviso: Falha ao carregar disponibilidade (${availabilityResponse.statusCode}). Usando dados vazios.");
       }
-
 
       if (mounted) {
         setState(() {
           _nameController.text = courtData['nome'] ?? '';
           _descriptionController.text = courtData['descricao'] ?? '';
           _sportsController.text = courtData['esporte'] ?? '';
-          _addressController.text = courtData['endereco'] ?? '';
+          _addressController.text = courtData['endereco'] ?? ''; // Simplificação: Assumindo string, ajuste se for Map
           _rulesController.text = courtData['regras'] ?? '';
 
            for (var day in _daysOfWeek) {
@@ -147,9 +126,7 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoadingData = false);
     }
@@ -165,7 +142,6 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
       if (user == null) throw Exception('Usuário não autenticado.');
       final idToken = await user.getIdToken(true);
 
-      // 1. Salvar Detalhes da Quadra (PUT ou POST)
       final courtData = {
         'nome': _nameController.text,
         'descricao': _descriptionController.text,
@@ -173,57 +149,41 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
         'endereco': _addressController.text,
         'regras': _rulesController.text,
       };
+      
       http.Response detailsResponse;
-      late Uri detailsUrl;
       String courtIdToUse;
 
       if (isEditing) {
-        detailsUrl = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}');
-        detailsResponse = await http.put(detailsUrl, headers: {'Content-Type': 'application/json','Authorization': 'Bearer $idToken'}, body: jsonEncode(courtData));
+        final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}');
+        detailsResponse = await http.put(url, headers: {'Content-Type': 'application/json','Authorization': 'Bearer $idToken'}, body: jsonEncode(courtData));
         courtIdToUse = widget.courtId!;
       } else {
-         detailsUrl = Uri.parse('${AppConfig.apiUrl}/courts');
-         detailsResponse = await http.post(detailsUrl, headers: {'Content-Type': 'application/json','Authorization': 'Bearer $idToken'}, body: jsonEncode(courtData));
-         // Pega o ID da resposta ao criar
+         final url = Uri.parse('${AppConfig.apiUrl}/courts');
+         detailsResponse = await http.post(url, headers: {'Content-Type': 'application/json','Authorization': 'Bearer $idToken'}, body: jsonEncode(courtData));
          if (detailsResponse.statusCode == 201) {
             courtIdToUse = jsonDecode(detailsResponse.body)['courtId'];
          } else {
-             final error = jsonDecode(detailsResponse.body);
-             throw Exception(error['message'] ?? 'Falha ao criar quadra.');
+             throw Exception(jsonDecode(detailsResponse.body)['message'] ?? 'Erro ao criar.');
          }
       }
 
       if (![200, 201].contains(detailsResponse.statusCode)) {
-         final error = jsonDecode(detailsResponse.body);
-         throw Exception(error['message'] ?? 'Falha ao salvar detalhes da quadra.');
+         throw Exception('Erro ao salvar detalhes.');
       }
 
-      // 2. Salvar Disponibilidade (PUT)
       final availabilityPayload = Map.fromEntries(
         _availability.entries.map((entry) => MapEntry(entry.key, entry.value.toJson()))
       );
-      final availabilityUrl = Uri.parse('${AppConfig.apiUrl}/courts/$courtIdToUse/availability');
-      final availabilityResponse = await http.put(
-        availabilityUrl,
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $idToken'},
-        body: jsonEncode(availabilityPayload),
-      );
-
-      if (availabilityResponse.statusCode != 200) {
-         final error = jsonDecode(availabilityResponse.body);
-         print('Erro ao salvar disponibilidade: ${error['message']}');
-         if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Detalhes salvos, mas houve erro na disponibilidade: ${error['message']}'), backgroundColor: Colors.orange));
-      }
+      final avUrl = Uri.parse('${AppConfig.apiUrl}/courts/$courtIdToUse/availability');
+      await http.put(avUrl, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $idToken'}, body: jsonEncode(availabilityPayload));
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Quadra ${isEditing ? 'atualizada' : 'cadastrada'} com sucesso!'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salvo com sucesso!'), backgroundColor: Colors.green));
         Navigator.of(context).pop(true);
       }
 
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -232,46 +192,32 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
   Future<void> _handleDelete() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Confirmar Exclusão'),
-          content: const Text('Tem certeza que deseja excluir este espaço? Esta ação não pode ser desfeita.'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Excluir', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir Espaço?'),
+        content: const Text('Essa ação é irreversível.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir', style: TextStyle(color: Colors.red))),
+        ],
+      ),
     );
 
     if (confirm != true) return;
-    if (!mounted) return;
     setState(() => _isDeleting = true);
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('Usuário não autenticado.');
-      final idToken = await user.getIdToken(true);
+      final idToken = await user!.getIdToken(true);
       final url = Uri.parse('${AppConfig.apiUrl}/courts/${widget.courtId}');
       final response = await http.delete(url, headers: {'Authorization': 'Bearer $idToken'});
 
       if (response.statusCode == 200 && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Quadra excluída com sucesso!'), backgroundColor: Colors.green));
         Navigator.of(context).pop(true);
       } else {
-        final error = jsonDecode(response.body);
-        throw Exception(error['message'] ?? 'Falha ao excluir quadra.');
+        throw Exception('Erro ao excluir.');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao excluir.'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -279,86 +225,105 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    _sportsController.dispose();
-    _addressController.dispose();
-    _rulesController.dispose();
-    _availability.forEach((key, value) => value.dispose()); // Limpa os controllers de preço
+    _nameController.dispose(); _descriptionController.dispose(); _sportsController.dispose();
+    _addressController.dispose(); _rulesController.dispose();
+    _availability.forEach((key, value) => value.dispose());
     super.dispose();
   }
 
   Future<TimeOfDay?> _selectTime(BuildContext context, TimeOfDay? initialTime) async {
     return await showTimePicker(
       context: context,
-      initialTime: initialTime ?? const TimeOfDay(hour: 18, minute: 0), // Sugere 18:00
-       builder: (context, child) { // Opcional: força modo de dial
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-          child: child ?? Container(),
-        );
-      },
+      initialTime: initialTime ?? const TimeOfDay(hour: 18, minute: 0),
+      builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(isEditing ? 'Editar Espaço' : 'Adicionar Novo Espaço'),
+        title: Text(isEditing ? 'Editar Espaço' : 'Novo Espaço', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: const BackButton(color: Colors.black87),
       ),
       body: _isLoadingData
           ? const Center(child: CircularProgressIndicator())
           : Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 80.0), // Padding inferior maior
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                 children: [
-                  TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Nome do espaço *'), validator: (v) => (v==null || v.isEmpty) ? 'Obrigatório' : null),
-                  const SizedBox(height: 16),
-                  TextFormField(controller: _descriptionController, decoration: const InputDecoration(labelText: 'Descrição'), maxLines: 3),
-                  const SizedBox(height: 24),
-                  const Text('Fotos do Espaço', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 100,
-                    decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade400)),
-                    child: const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [ Icon(Icons.add_a_photo_outlined, color: AppTheme.hintColor), SizedBox(height: 8), Text('Adicionar fotos', style: TextStyle(color: AppTheme.hintColor))]))
-                  ),
-                  const SizedBox(height: 24),
-                  TextFormField(controller: _sportsController, decoration: const InputDecoration(labelText: 'Esportes (separados por vírgula) *'), validator: (v) => (v==null || v.isEmpty) ? 'Obrigatório' : null),
-                  const SizedBox(height: 16),
-                  TextFormField(controller: _addressController, decoration: const InputDecoration(labelText: 'Endereço Completo *'), validator: (v) => (v==null || v.isEmpty) ? 'Obrigatório' : null),
-                  const SizedBox(height: 16),
-                  TextFormField(controller: _rulesController, decoration: const InputDecoration(labelText: 'Regras de utilização'), maxLines: 2),
-                  const SizedBox(height: 32),
+                  _buildSectionTitle('Informações Básicas'),
+                  const SizedBox(height: 12),
+                  _buildTextField(controller: _nameController, label: 'Nome do Espaço', icon: Icons.store, required: true),
+                  const SizedBox(height: 12),
+                  _buildTextField(controller: _sportsController, label: 'Esportes (ex: Futsal, Vôlei)', icon: Icons.sports_soccer, required: true),
+                  const SizedBox(height: 12),
+                  _buildTextField(controller: _addressController, label: 'Endereço Completo', icon: Icons.location_on_outlined, required: true),
+                  const SizedBox(height: 12),
+                  _buildTextField(controller: _descriptionController, label: 'Descrição', icon: Icons.description_outlined, maxLines: 3),
+                  const SizedBox(height: 12),
+                  _buildTextField(controller: _rulesController, label: 'Regras de Uso', icon: Icons.rule, maxLines: 2),
                   
-                  // --- SEÇÃO DISPONIBILIDADE ---
-                  const Divider(thickness: 1),
-                  const SizedBox(height: 16),
-                  const Text('Disponibilidade e Preços', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  const Text('Marque os dias em que o espaço está aberto e defina os horários e preço por hora.', style: TextStyle(color: AppTheme.hintColor)),
-                  const SizedBox(height: 16),
-                  ..._daysOfWeek.map((day) => _buildAvailabilityRow(day, _availability[day]!)),
-                  // -----------------------------
+                  const SizedBox(height: 32),
+                  _buildSectionTitle('Fotos'),
+                  const SizedBox(height: 12),
+                  Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: InkWell(
+                      onTap: () {}, // TODO: Implementar upload
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_photo_alternate_outlined, size: 40, color: AppTheme.primaryColor.withOpacity(0.5)),
+                          const SizedBox(height: 8),
+                          Text('Toque para adicionar fotos', style: TextStyle(color: Colors.grey[600])),
+                        ],
+                      ),
+                    ),
+                  ),
 
-                  const SizedBox(height: 48),
-                  ElevatedButton(
-                    onPressed: _isSaving || _isDeleting ? null : _handleSave,
-                    child: _isSaving
-                        ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(isEditing ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR ESPAÇO'),
+                  const SizedBox(height: 32),
+                  _buildSectionTitle('Disponibilidade & Preços'),
+                  const SizedBox(height: 4),
+                  Text('Defina os horários de funcionamento e valor por hora.', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                  const SizedBox(height: 16),
+                  ..._daysOfWeek.map((day) => _buildAvailabilityCard(day, _availability[day]!)),
+
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isSaving || _isDeleting ? null : _handleSave,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: _isSaving 
+                        ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white)) 
+                        : Text(isEditing ? 'SALVAR ALTERAÇÕES' : 'CADASTRAR', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                   if (isEditing) ...[
                     const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: _isDeleting || _isSaving ? null : _handleDelete,
-                      icon: _isDeleting
-                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
-                          : const Icon(Icons.delete_outline),
-                      label: const Text('Excluir Espaço'),
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+                    SizedBox(
+                      height: 50,
+                      child: OutlinedButton.icon(
+                        onPressed: _isDeleting || _isSaving ? null : _handleDelete,
+                        icon: _isDeleting ? const SizedBox() : const Icon(Icons.delete_outline),
+                        label: _isDeleting ? const CircularProgressIndicator(color: Colors.red) : const Text('Excluir Espaço'),
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+                      ),
                     ),
                   ],
                 ],
@@ -367,79 +332,120 @@ class _AddEditCourtPageState extends State<AddEditCourtPage> {
     );
   }
 
-  // Widget Auxiliar para Linha de Disponibilidade
-  Widget _buildAvailabilityRow(String dayName, AvailabilityDay dayData) {
-    String formatTime(TimeOfDay? time) => time == null ? 'HH:MM' : '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  Widget _buildSectionTitle(String title) {
+    return Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textColor));
+  }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Material( // Wrap with Material for InkWell splash effect
-        color: dayData.isOpen ? Colors.green.withOpacity(0.05) : Colors.grey.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-          child: Row(
-            children: [
-              Checkbox(
-                value: dayData.isOpen,
-                activeColor: AppTheme.primaryColor,
-                onChanged: (bool? value) => setState(() => dayData.isOpen = value ?? false),
-              ),
-              Expanded(flex: 2, child: Text(dayName[0].toUpperCase() + dayName.substring(1), style: TextStyle(fontWeight: FontWeight.w500, color: dayData.isOpen ? AppTheme.textColor : Colors.grey))),
-              const SizedBox(width: 8),
+  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, bool required = false, int maxLines = 1}) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      validator: required ? (v) => (v == null || v.isEmpty) ? 'Obrigatório' : null : null,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: Colors.grey[500]),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      ),
+    );
+  }
 
-              // Time Pickers
-              InkWell(
-                onTap: !dayData.isOpen ? null : () async {
-                  final selectedTime = await _selectTime(context, dayData.startTime);
-                  if (selectedTime != null) setState(() => dayData.startTime = selectedTime);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                   decoration: BoxDecoration(border: Border.all(color: dayData.isOpen ? Colors.grey.shade400 : Colors.transparent), borderRadius: BorderRadius.circular(4)),
-                  child: Text(formatTime(dayData.startTime), style: TextStyle(color: dayData.isOpen ? AppTheme.textColor : Colors.grey)),
-                )
-              ),
-              const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Text('às')),
-              InkWell(
-                 onTap: !dayData.isOpen ? null : () async {
-                   final selectedTime = await _selectTime(context, dayData.endTime);
-                  if (selectedTime != null) setState(() => dayData.endTime = selectedTime);
-                },
-                 child: Container(
-                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                   decoration: BoxDecoration(border: Border.all(color: dayData.isOpen ? Colors.grey.shade400 : Colors.transparent), borderRadius: BorderRadius.circular(4)),
-                   child: Text(formatTime(dayData.endTime), style: TextStyle(color: dayData.isOpen ? AppTheme.textColor : Colors.grey)),
-                 )
-              ),
-              const SizedBox(width: 12),
+  Widget _buildAvailabilityCard(String dayName, AvailabilityDay dayData) {
+    final dayLabel = dayName[0].toUpperCase() + dayName.substring(1);
+    String formatTime(TimeOfDay? time) => time == null ? '--:--' : '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
-              // Price Field
-              SizedBox(
-                width: 90, // Aumentado um pouco
-                child: TextFormField(
-                  controller: dayData.priceController,
-                  decoration: InputDecoration(
-                     isDense: true, // Reduz altura
-                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10), // Ajusta padding interno
-                     labelText: 'Preço/h',
-                     prefixText: 'R\$ ',
-                     border: OutlineInputBorder(borderSide: BorderSide(color: dayData.isOpen ? Colors.grey.shade400 : Colors.transparent)),
-                     enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: dayData.isOpen ? Colors.grey.shade400 : Colors.transparent)),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  enabled: dayData.isOpen,
-                  style: TextStyle(color: dayData.isOpen ? AppTheme.textColor : Colors.grey),
-                  validator: (value) {
-                    if (dayData.isOpen && (value == null || value.isEmpty || (double.tryParse(value.replaceAll(',', '.')) ?? -1) <= 0)) {
-                      return 'Inválido';
-                    }
-                    return null;
-                  },
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: dayData.isOpen ? AppTheme.primaryColor.withOpacity(0.3) : Colors.grey[200]!),
+      ),
+      color: dayData.isOpen ? Colors.white : Colors.grey[50],
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Checkbox(
+                  value: dayData.isOpen,
+                  activeColor: AppTheme.primaryColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                  onChanged: (val) => setState(() => dayData.isOpen = val ?? false),
                 ),
+                Text(dayLabel, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: dayData.isOpen ? Colors.black87 : Colors.grey)),
+              ],
+            ),
+            if (dayData.isOpen) ...[
+              const Divider(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final t = await _selectTime(context, dayData.startTime);
+                        if(t != null) setState(() => dayData.startTime = t);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Abre às', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            Text(formatTime(dayData.startTime), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final t = await _selectTime(context, dayData.endTime);
+                        if(t != null) setState(() => dayData.endTime = t);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Fecha às', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            Text(formatTime(dayData.endTime), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                      child: TextFormField(
+                        controller: dayData.priceController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Preço/h',
+                          prefixText: 'R\$ ',
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        validator: (v) => (dayData.isOpen && (v==null || v.isEmpty)) ? '!' : null,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ]
+          ],
         ),
       ),
     );

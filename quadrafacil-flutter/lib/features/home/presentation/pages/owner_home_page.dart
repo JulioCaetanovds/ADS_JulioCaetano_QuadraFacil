@@ -13,7 +13,9 @@ import 'package:quadrafacil/features/owner_panel/presentation/pages/edit_owner_p
 import 'package:quadrafacil/features/owner_panel/presentation/pages/payment_settings_page.dart';
 import 'package:quadrafacil/features/owner_panel/presentation/pages/reports_page.dart';
 
-// ABA MEUS ESPAÇOS (RF03)
+// ============================================================================
+// ABA MEUS ESPAÇOS (RF03) - VISUAL PREMIUM
+// ============================================================================
 class MyCourtsTab extends StatefulWidget {
   const MyCourtsTab({super.key});
 
@@ -33,9 +35,9 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
 
   Future<void> _fetchCourts() async {
     if (!mounted) return;
-    if (!_isLoading) {
-      setState(() => _isLoading = true);
-    }
+    // Se a lista já tem itens, não mostra loading full screen, só atualiza silenciosamente
+    if (_courts.isEmpty) setState(() => _isLoading = true);
+    
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Usuário não autenticado.');
@@ -52,14 +54,12 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
           });
         }
       } else {
-        throw Exception('Falha ao carregar quadras: ${response.body}');
+        throw Exception('Falha ao carregar quadras');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erro ao carregar seus espaços.'), backgroundColor: Colors.red),
         );
         setState(() => _isLoading = false);
       }
@@ -68,22 +68,21 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
 
   Future<void> _handleNavigationResult(dynamic result) async {
     if (result == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Atualizando lista de quadras...'),
-          backgroundColor: Colors.blueAccent,
-          duration: Duration(seconds: 1)));
-      await _fetchCourts(); // Recarrega a lista
+      await _fetchCourts(); // Recarrega a lista silenciosamente
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Meus Espaços'),
+        title: const Text('Meus Espaços', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.black87),
             onPressed: _fetchCourts,
             tooltip: 'Atualizar',
           )
@@ -94,28 +93,54 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
           : _courts.isEmpty
               ? Center(
                   child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('Nenhum espaço cadastrado ainda.'),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                        onPressed: _fetchCourts,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Tentar Novamente'))
-                  ],
-                ))
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.store_mall_directory_outlined, size: 64, color: Colors.grey[300]),
+                      const SizedBox(height: 16),
+                      const Text('Nenhum espaço cadastrado.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                           final result = await Navigator.of(context).push(
+                             MaterialPageRoute(builder: (context) => const AddEditCourtPage()),
+                           );
+                           _handleNavigationResult(result);
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Cadastrar Primeiro Espaço'),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                      )
+                    ],
+                  ))
               : RefreshIndicator(
                   onRefresh: _fetchCourts,
-                  child: ListView.builder(
+                  child: ListView.separated(
                     padding: const EdgeInsets.all(16.0),
                     itemCount: _courts.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 16),
                     itemBuilder: (context, index) {
                       final court = _courts[index];
-                      return OwnedCourtListItem(
+                      
+                      // --- CORREÇÃO DE SEGURANÇA AQUI ---
+                      String enderecoDisplay = 'Endereço N/D';
+                      final rawEndereco = court['endereco'];
+
+                      if (rawEndereco is String) {
+                        // Se for string direta, usa ela
+                        enderecoDisplay = rawEndereco;
+                      } else if (rawEndereco is Map) {
+                        // Se for mapa, tenta pegar a rua ou monta o endereço
+                        enderecoDisplay = rawEndereco['rua'] ?? rawEndereco['logradouro'] ?? 'Endereço detalhado';
+                        if (rawEndereco['numero'] != null) {
+                          enderecoDisplay += ', ${rawEndereco['numero']}';
+                        }
+                      }
+                      // ----------------------------------
+                      return OwnedCourtCard(
                           courtId: court['id'],
                           nome: court['nome'] ?? 'Nome indisponível',
-                          ocupacao: 0, // Placeholder
-                          status: 'Ativo', // Placeholder
+                          endereco: enderecoDisplay, // Usa a variável tratada
+                          status: 'Ativo', 
                           onTap: () async {
                             final result = await Navigator.of(context).push(
                               MaterialPageRoute(
@@ -127,7 +152,7 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
                     },
                   ),
                 ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: _courts.isEmpty ? null : FloatingActionButton.extended( // Esconde se vazio pois já tem botão no centro
         onPressed: () async {
           final result = await Navigator.of(context).push(
             MaterialPageRoute(builder: (context) => const AddEditCourtPage()),
@@ -143,7 +168,9 @@ class _MyCourtsTabState extends State<MyCourtsTab> {
   }
 }
 
-// ABA AGENDA (RF04, RF07) - (MODIFICADA)
+// ============================================================================
+// ABA AGENDA (RF04, RF07) - PAINEL DE CONTROLE
+// ============================================================================
 class OwnerAgendaTab extends StatefulWidget {
   const OwnerAgendaTab({super.key});
   @override
@@ -160,9 +187,7 @@ class _OwnerAgendaTabState extends State<OwnerAgendaTab> {
     _fetchBookings();
   }
 
-  // 3. Função para ser chamada ao voltar da tela de detalhes
   Future<void> _handleNavigationResult(dynamic result) async {
-    // Se a tela de detalhes retornar 'true' (porque um status mudou), atualiza a lista
     if (result == true && mounted) {
       await _fetchBookings();
     }
@@ -170,66 +195,75 @@ class _OwnerAgendaTabState extends State<OwnerAgendaTab> {
 
   Future<void> _fetchBookings() async {
     if (!mounted) return;
-    if (!_isLoading) {
-      setState(() => _isLoading = true);
-    }
+    if (_bookings.isEmpty) setState(() => _isLoading = true);
+    
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Usuário não autenticado.');
       final idToken = await user.getIdToken(true);
 
       final url = Uri.parse('${AppConfig.apiUrl}/bookings/owner');
-
-      final response =
-          await http.get(url, headers: {'Authorization': 'Bearer $idToken'});
+      final response = await http.get(url, headers: {'Authorization': 'Bearer $idToken'});
 
       if (response.statusCode == 200) {
         if (mounted) {
+          // Ordenação: Pendentes primeiro, depois por data
+          List<dynamic> loaded = jsonDecode(response.body);
+          loaded.sort((a, b) {
+             // Prioridade para Pendentes
+             bool aPendente = (a['status'] ?? '').toLowerCase() == 'pendente';
+             bool bPendente = (b['status'] ?? '').toLowerCase() == 'pendente';
+             if (aPendente && !bPendente) return -1;
+             if (!aPendente && bPendente) return 1;
+             
+             // Desempate por data (mais recente primeiro)
+             // (Simplificação aqui, idealmente converteria timestamp)
+             return 0;
+          });
+
           setState(() {
-            _bookings = jsonDecode(response.body);
+            _bookings = loaded;
             _isLoading = false;
           });
         }
       } else {
-        throw Exception('Falha ao carregar reservas: ${response.body}');
+        throw Exception('Falha ao carregar reservas.');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erro ao carregar agenda.'), backgroundColor: Colors.red),
         );
         setState(() => _isLoading = false);
       }
     }
   }
 
-  // 4. Nova função para formatar o Timestamp (igual a do Atleta)
   String _formatBookingTimestamp(dynamic timestamp) {
     DateTime? startTime;
     if (timestamp is Map && timestamp['_seconds'] != null) {
-      startTime =
-          DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
+      startTime = DateTime.fromMillisecondsSinceEpoch(timestamp['_seconds'] * 1000);
     } else if (timestamp is String) {
       startTime = DateTime.tryParse(timestamp);
     }
 
     if (startTime != null) {
-      // Retorna data e hora
       return DateFormat('dd/MM/yy HH:mm', 'pt_BR').format(startTime);
     }
-    return 'N/A - N/A';
+    return 'N/A';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+        backgroundColor: Colors.grey[50],
         appBar: AppBar(
-          title: const Text('Agenda'),
+          title: const Text('Agenda de Reservas', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white,
+          elevation: 0,
           actions: [
             IconButton(
-                icon: const Icon(Icons.refresh),
+                icon: const Icon(Icons.refresh, color: Colors.black87),
                 onPressed: _fetchBookings,
                 tooltip: 'Atualizar')
           ],
@@ -241,40 +275,41 @@ class _OwnerAgendaTabState extends State<OwnerAgendaTab> {
                     child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Nenhuma reserva encontrada.'),
+                      Icon(Icons.event_busy, size: 64, color: Colors.grey[300]),
                       const SizedBox(height: 16),
-                      ElevatedButton.icon(
+                      const Text('Sua agenda está livre.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                      const SizedBox(height: 24),
+                      OutlinedButton.icon(
                           onPressed: _fetchBookings,
                           icon: const Icon(Icons.refresh),
-                          label: const Text('Tentar Novamente'))
+                          label: const Text('Atualizar'))
                     ],
                   ))
                 : RefreshIndicator(
                     onRefresh: _fetchBookings,
-                    child: ListView.builder(
+                    child: ListView.separated(
                       padding: const EdgeInsets.all(16.0),
                       itemCount: _bookings.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final booking = _bookings[index];
                         
-                        // 5. CORREÇÃO DOS DADOS (API envia 'quadraNome' e 'userName')
                         final quadraNome = booking['quadraNome'] ?? booking['courtId'] ?? 'Quadra N/A';
                         final clienteNome = booking['userName'] ?? booking['userId'] ?? 'Cliente N/A';
                         final horarioFormatado = _formatBookingTimestamp(booking['startTime']);
+                        final status = booking['status'] ?? 'N/A';
 
-                        return BookingListItem(
+                        return BookingCardOwner(
                           quadra: quadraNome,
-                          data: 'Cliente: $clienteNome',
+                          cliente: clienteNome,
                           horario: horarioFormatado,
-                          status: booking['status'] ?? 'N/A',
+                          status: status,
                           onTap: () async {
-                            // 6. Passa o MAP 'booking' completo, NÃO o BookingData
                             final result = await Navigator.of(context).push(
                               MaterialPageRoute(
                                   builder: (context) =>
                                       BookingDetailsPage(booking: booking)),
                             );
-                            // 7. Chama a função para atualizar a lista se algo mudou
                             _handleNavigationResult(result);
                           },
                         );
@@ -284,62 +319,111 @@ class _OwnerAgendaTabState extends State<OwnerAgendaTab> {
   }
 }
 
-// ABA PERFIL (RF02)
+// ============================================================================
+// ABA PERFIL (RF02) - ESTILO MODERNO
+// ============================================================================
 class OwnerProfileTab extends StatelessWidget {
   const OwnerProfileTab({super.key});
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final userName = user?.displayName ?? 'Dono do Espaço';
+    final userEmail = user?.email ?? 'email@exemplo.com';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Meu Perfil')),
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+          title: const Text('Meu Perfil', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white, 
+          elevation: 0
+      ),
       body: ListView(
         children: [
-          const SizedBox(height: 24),
-          const CircleAvatar(
-              radius: 50,
-              backgroundColor: AppTheme.primaryColor,
-              child: Icon(Icons.store, size: 60, color: Colors.white)),
-          const SizedBox(height: 12),
-          const Text('Júlio Caetano (Dono)',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const Text('dono@email.com',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: AppTheme.hintColor)),
           const SizedBox(height: 32),
-          const Divider(),
-          ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Editar Perfil'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => const EditOwnerProfilePage()))),
-          ListTile(
-              leading: const Icon(Icons.account_balance_wallet_outlined),
-              title: const Text('Configurações de Pagamento'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => const PaymentSettingsPage()))),
-          ListTile(
-              leading: const Icon(Icons.bar_chart_outlined),
-              title: const Text('Relatórios'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (context) => const ReportsPage()))),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Deslogar', style: TextStyle(color: Colors.red)),
-            onTap: () => Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-                (Route<dynamic> route) => false),
+          Center(
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 4),
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                  ),
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: AppTheme.primaryColor,
+                    child: user?.photoURL != null 
+                        ? ClipOval(child: Image.network(user!.photoURL!, fit: BoxFit.cover, width: 100, height: 100))
+                        : const Icon(Icons.store, size: 50, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: 16),
+          Text(userName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+          Text(userEmail, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+          const SizedBox(height: 32),
+          
+          // Menu Options
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              children: [
+                _buildProfileOption(context, 'Editar Perfil', Icons.edit_outlined, const EditOwnerProfilePage()),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                _buildProfileOption(context, 'Configurações de Pagamento', Icons.account_balance_wallet_outlined, const PaymentSettingsPage()),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                _buildProfileOption(context, 'Relatórios & Métricas', Icons.bar_chart_outlined, const ReportsPage()),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextButton.icon(
+                onPressed: () async {
+                    await FirebaseAuth.instance.signOut();
+                    if (context.mounted) {
+                        Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (context) => const LoginPage()),
+                            (Route<dynamic> route) => false);
+                    }
+                },
+                icon: const Icon(Icons.logout, color: Colors.red),
+                label: const Text('Sair da Conta', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.red.withOpacity(0.05),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                ),
+            ),
+          ),
+          const SizedBox(height: 30),
         ],
       ),
     );
   }
+
+  Widget _buildProfileOption(BuildContext context, String title, IconData icon, Widget page) {
+    return ListTile(
+        leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: AppTheme.primaryColor, size: 20)
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => page)),
+    );
+  }
 }
 
-// HOME PAGE PRINCIPAL DO DONO
+// ============================================================================
+// HOME PAGE PRINCIPAL DO DONO (WRAPPER)
+// ============================================================================
 class OwnerHomePage extends StatefulWidget {
   const OwnerHomePage({super.key});
 
@@ -349,15 +433,14 @@ class OwnerHomePage extends StatefulWidget {
 
 class _OwnerHomePageState extends State<OwnerHomePage> {
   int _selectedIndex = 0;
-  final GlobalKey<_MyCourtsTabState> myCourtsTabKey =
-      GlobalKey<_MyCourtsTabState>();
+  final GlobalKey<_MyCourtsTabState> myCourtsTabKey = GlobalKey<_MyCourtsTabState>();
   late final List<Widget> _tabs;
 
   @override
   void initState() {
     super.initState();
     _tabs = <Widget>[
-      MyCourtsTab(key: myCourtsTabKey), // Passa a key
+      MyCourtsTab(key: myCourtsTabKey), 
       const OwnerAgendaTab(),
       const OwnerProfileTab(),
     ];
@@ -370,102 +453,202 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
         index: _selectedIndex,
         children: _tabs,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-              icon: Icon(Icons.store_mall_directory_outlined),
-              label: 'Meus Espaços'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.event_note_outlined), label: 'Agenda'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline), label: 'Perfil'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          currentIndex: _selectedIndex,
+          selectedItemColor: AppTheme.primaryColor,
+          unselectedItemColor: Colors.grey[400],
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          onTap: (index) => setState(() => _selectedIndex = index),
+          items: const <BottomNavigationBarItem>[
+            BottomNavigationBarItem(
+                icon: Icon(Icons.store_mall_directory_outlined),
+                label: 'Espaços'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.event_note_outlined), label: 'Agenda'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline), label: 'Perfil'),
+          ],
+        ),
       ),
     );
   }
 }
 
-// WIDGET REUTILIZÁVEL PARA ITEM DA LISTA DE QUADRAS DO DONO
-class OwnedCourtListItem extends StatelessWidget {
+// ============================================================================
+// WIDGET: CARD DE QUADRA DO DONO (VISUAL PREMIUM)
+// ============================================================================
+class OwnedCourtCard extends StatelessWidget {
   final String courtId;
   final String nome;
-  final int ocupacao;
+  final String endereco;
   final String status;
   final VoidCallback? onTap;
 
-  const OwnedCourtListItem({
+  const OwnedCourtCard({
     super.key,
     required this.courtId,
     required this.nome,
-    required this.ocupacao,
+    required this.endereco,
     required this.status,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12.0),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(12.0),
-        title: Text(nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('Ocupação hoje: $ocupacao%'), // Placeholder
-        trailing: Icon(
-          Icons.circle,
-          color: status == 'Ativo' ? Colors.green : Colors.grey, // Placeholder
-          size: 12,
+    final imageUrl = 'https://placehold.co/300x200/2E7D32/FFFFFF/png?text=${Uri.encodeComponent(nome)}&font=roboto';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                // Imagem Pequena
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    imageUrl,
+                    width: 80, height: 80, fit: BoxFit.cover,
+                    errorBuilder: (c,e,s) => Container(width: 80, height: 80, color: Colors.grey[200], child: const Icon(Icons.image, color: Colors.grey)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                
+                // Infos
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 4),
+                      Text(endereco, style: TextStyle(color: Colors.grey[600], fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.circle, size: 10, color: Colors.green[400]),
+                          const SizedBox(width: 6),
+                          Text('Ativo', style: TextStyle(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+                
+                // Ícone Editar
+                const Icon(Icons.edit_square, color: AppTheme.primaryColor),
+              ],
+            ),
+          ),
         ),
-        onTap: onTap,
       ),
     );
   }
 }
 
-// WIDGET REUTILIZÁVEL PARA ITEM DE RESERVA (usado na OwnerAgendaTab)
-class BookingListItem extends StatelessWidget {
-  final String quadra, data, horario, status;
+// ============================================================================
+// WIDGET: CARD DE RESERVA DO DONO (USADO NA AGENDA)
+// ============================================================================
+class BookingCardOwner extends StatelessWidget {
+  final String quadra, cliente, horario, status;
   final VoidCallback? onTap;
 
-  const BookingListItem({
+  const BookingCardOwner({
     super.key,
     required this.quadra,
-    required this.data,
+    required this.cliente,
     required this.horario,
     required this.status,
     this.onTap,
   });
 
   Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) { // Convertido para toLowerCase para segurança
-      case 'confirmada':
-        return Colors.green;
-      case 'pendente':
-        return Colors.orange;
-      case 'cancelada':
-        return Colors.red;
-      default:
-        return Colors.grey;
+    switch (status.toLowerCase()) {
+      case 'confirmada': return Colors.green[700]!;
+      case 'pendente': return Colors.orange[800]!;
+      case 'cancelada': return Colors.red[700]!;
+      default: return Colors.grey;
+    }
+  }
+
+  Color _getStatusBgColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmada': return Colors.green[50]!;
+      case 'pendente': return Colors.orange[50]!;
+      case 'cancelada': return Colors.red[50]!;
+      default: return Colors.grey[100]!;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: const Icon(Icons.receipt_long_outlined,
-            color: AppTheme.primaryColor, size: 40),
-        title: Text(quadra, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('$data • $horario'),
-        trailing: Text(
-          status.toUpperCase(),
-          style: TextStyle(
-              color: _getStatusColor(status), fontWeight: FontWeight.bold),
+    final statusColor = _getStatusColor(status);
+    final statusBg = _getStatusBgColor(status);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))],
+        // Borda lateral colorida para indicar status rapidamente
+        border: Border(left: BorderSide(color: statusColor, width: 4)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(quadra, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(8)),
+                      child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.person, size: 16, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Text(cliente, style: TextStyle(color: Colors.grey[700])),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Text(horario, style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
-        onTap: onTap,
       ),
     );
   }

@@ -1,6 +1,5 @@
 // lib/features/chat/presentation/pages/chat_detail_page.dart
 import 'package:flutter/material.dart';
-// IMPORTS CORRIGIDOS:
 import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -8,7 +7,6 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:intl/intl.dart'; 
 
-// IMPORT LOCAL CORRIGIDO:
 import 'package:quadrafacil/core/config.dart';
 import 'package:quadrafacil/core/theme/app_theme.dart';
 
@@ -74,37 +72,18 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             'texto': data['texto'],
             'timestamp': timestamp,
           };
-        }).toList().reversed.toList();
+        }).toList(); // Mantém a ordem invertida (mais novo embaixo) para o ListView.reverse
 
         setState(() {
           _messages = newMessages;
           _isLoading = false;
         });
-        
-        _scrollToBottom();
       }
     }, onError: (error) {
-      if (mounted) {
-        print('Erro ao ouvir mensagens: $error');
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     });
   }
   
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      });
-    }
-  }
-
   Future<void> _sendMessage() async {
     final messageText = _messageController.text.trim();
     if (messageText.isEmpty) return;
@@ -116,7 +95,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       if (user == null) throw Exception('Usuário não autenticado.');
       final idToken = await user.getIdToken(true);
 
-      // Chamada da API REST para enviar a mensagem
       final url = Uri.parse('${AppConfig.apiUrl}/chats/${widget.chatId}/messages');
       await http.post(
         url,
@@ -131,67 +109,27 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao enviar: ${e.toString().replaceAll('Exception: ', '')}')),
+          const SnackBar(content: Text('Erro ao enviar mensagem.'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> message) {
-    final isMe = message['remetenteId'] == _currentUserId;
-    final time = message['timestamp'] != null
-        ? DateFormat('HH:mm').format(message['timestamp'] as DateTime)
-        : '';
-    
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: isMe ? AppTheme.primaryColor : Colors.grey[300],
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(15),
-            topRight: const Radius.circular(15),
-            bottomLeft: isMe ? const Radius.circular(15) : const Radius.circular(2),
-            bottomRight: isMe ? const Radius.circular(2) : const Radius.circular(15),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (!isMe)
-               Text(
-                 'Participante ${message['remetenteId']?.substring(0, 4) ?? 'Desconhecido'}', 
-                 style: const TextStyle(fontSize: 10, color: AppTheme.textColor, fontWeight: FontWeight.bold)
-               ),
-            if (!isMe) const SizedBox(height: 4),
-            
-            Text(
-              message['texto'] ?? '',
-              style: TextStyle(color: isMe ? Colors.white : AppTheme.textColor),
-            ),
-            
-            const SizedBox(height: 4),
-            Text(
-              time,
-              style: TextStyle(fontSize: 10, color: isMe ? Colors.white70 : Colors.black54),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF2F2F7), // Fundo cinza estilo iOS
       appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.title, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text('Online', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.normal)),
+          ],
+        ),
+        backgroundColor: Colors.white,
+        elevation: 1,
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: Column(
         children: [
@@ -199,42 +137,155 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator())
               : _messages.isEmpty
-                  ? const Center(child: Text('Nenhuma mensagem. Comece a conversa!', style: TextStyle(color: AppTheme.hintColor)))
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[300]),
+                          const SizedBox(height: 16),
+                          Text('Inicie a conversa!', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+                        ],
+                      ),
+                    )
                   : ListView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.only(top: 10, bottom: 5),
+                      reverse: true, // Inverte a lista: o item 0 é o mais recente (embaixo)
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                       itemCount: _messages.length,
                       itemBuilder: (context, index) {
-                        return _buildMessageBubble(_messages[index]);
+                        // Lógica para agrupar mensagens ou mostrar data
+                        final msg = _messages[index];
+                        final isMe = msg['remetenteId'] == _currentUserId;
+                        final showAvatar = !isMe; // Simplificação: sempre mostra avatar se não for eu
+
+                        return _ChatBubble(
+                          text: msg['texto'],
+                          timestamp: msg['timestamp'],
+                          isMe: isMe,
+                          showAvatar: showAvatar,
+                        );
                       },
                     ),
           ),
           
+          // Área de Input Moderna
           Container(
-            padding: const EdgeInsets.only(left: 16, right: 8, bottom: 8, top: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              boxShadow: [
-                BoxShadow(color: Colors.grey.withOpacity(0.2), spreadRadius: 1, blurRadius: 5),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), offset: const Offset(0, -2), blurRadius: 10)],
             ),
             child: SafeArea( 
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      decoration: const InputDecoration(
-                        hintText: 'Digite sua mensagem...',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.grey[300]!),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: const InputDecoration(
+                          hintText: 'Escreva uma mensagem...',
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        textCapitalization: TextCapitalization.sentences,
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: AppTheme.primaryColor),
-                    onPressed: _sendMessage,
+                  const SizedBox(width: 12),
+                  InkWell(
+                    onTap: _sendMessage,
+                    borderRadius: BorderRadius.circular(50),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.primaryColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.send, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatBubble extends StatelessWidget {
+  final String text;
+  final DateTime timestamp;
+  final bool isMe;
+  final bool showAvatar;
+
+  const _ChatBubble({
+    required this.text,
+    required this.timestamp,
+    required this.isMe,
+    this.showAvatar = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final timeStr = DateFormat('HH:mm').format(timestamp);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isMe && showAvatar) ...[
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.grey[300],
+              child: const Icon(Icons.person, size: 16, color: Colors.white),
+            ),
+            const SizedBox(width: 8),
+          ] else if (!isMe) ...[
+             const SizedBox(width: 36), // Espaço vazio para alinhar
+          ],
+
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isMe ? AppTheme.primaryColor : Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(4),
+                  bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
+                ),
+                boxShadow: isMe ? null : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
+              ),
+              child: Column(
+                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: isMe ? Colors.white : Colors.black87,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      color: isMe ? Colors.white70 : Colors.grey[400],
+                      fontSize: 10,
+                    ),
                   ),
                 ],
               ),
